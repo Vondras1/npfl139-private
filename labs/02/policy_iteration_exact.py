@@ -51,7 +51,7 @@ def argmax_with_tolerance(x: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] | np.ndarray]:
-    # Start with zero value function and "go North" policy
+    # Initialization: Start with zero value function and "go North" policy
     value_function = [0.0] * GridWorld.states
     policy = [0] * GridWorld.states
 
@@ -62,9 +62,40 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # in unacceptable error. During the policy improvement, use the
     # `argmax_with_tolerance` to choose the best action.
 
+    for _ in range(args.steps):
+        value_function = policy_evaluation(value_function, policy, args)
+        policy, stable = policy_improvement(value_function, policy, args)
+        if stable:
+            break
+
     # TODO: The final value function should be in `value_function` and final greedy policy in `policy`.
     return value_function, policy
 
+# Policy evaluation by solving the system of linear equations Ax = b, where x is the value function. A contains the coefficients of the value function and b contains the rewards. The system is derived from the Bellman equation for policy evaluation.
+def policy_evaluation(value_function, policy, args):
+    A = np.zeros((GridWorld.states, GridWorld.states), dtype=np.float64)
+    b = np.zeros(GridWorld.states, dtype=np.float64)
+    for state in range(GridWorld.states):
+        A[state, state] = 1.0
+        for probability, reward, new_state in GridWorld.step(state, policy[state]):
+            A[state, new_state] -= float(probability) * float(args.gamma)
+            b[state] += float(probability) * float(reward)
+    return np.linalg.solve(A, b)
+
+def policy_improvement(value_function, policy, args):
+    policy_stable = True
+    for state in range(GridWorld.states):
+        old_action = policy[state]
+        all_values = []
+        for action in range(GridWorld.actions):
+            val_fce = 0
+            for probability, reward, new_state in GridWorld.step(state, action):
+                val_fce += probability * (reward + args.gamma * value_function[new_state])
+            all_values.append(val_fce)
+        policy[state] = int(argmax_with_tolerance(np.array(all_values, dtype=np.float64)))
+        if old_action != policy[state]:
+            policy_stable = False
+    return policy, policy_stable
 
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
