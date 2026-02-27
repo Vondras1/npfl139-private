@@ -63,9 +63,36 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # the value function in-place for states 0, 1, ...). During the policy
     # improvement, use the `argmax_with_tolerance` to choose the best action.
 
+    for _ in range(args.steps):
+        value_function = policy_evaluation(value_function, policy, args)
+        policy, stable = policy_improvement(value_function, policy, args)
+
     # TODO: The final value function should be in `value_function` and final greedy policy in `policy`.
     return value_function, policy
 
+def policy_evaluation(value_function, policy, args):
+    for _ in range(args.iterations):
+        for state in range(GridWorld.states):
+            new_value = 0
+            for probability, reward, new_state in GridWorld.step(state, policy[state]):
+                new_value += probability * (reward + args.gamma * value_function[new_state])
+            value_function[state] = new_value
+    return value_function
+
+def policy_improvement(value_function, policy, args):
+    policy_stable = True
+    for state in range(GridWorld.states):
+        old_action = policy[state]
+        all_values = []
+        for action in range(GridWorld.actions):
+            val_fce = 0
+            for probability, reward, new_state in GridWorld.step(state, action):
+                val_fce += probability * (reward + args.gamma * value_function[new_state])
+            all_values.append(val_fce)
+        policy[state] = int(argmax_with_tolerance(np.array(all_values, dtype=np.float64)))
+        if old_action != policy[state]:
+            policy_stable = False
+    return policy, policy_stable
 
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
