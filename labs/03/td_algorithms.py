@@ -56,12 +56,111 @@ def main(args: argparse.Namespace) -> np.ndarray:
 
         # Generate episode and update Q using the given TD method
         next_action, next_action_prob = choose_next_action(Q)
-        while not done:
-            action, action_prob, state = next_action, next_action_prob, next_state
-            next_state, reward, terminated, truncated, _ = env.step(action)
-            done = terminated or truncated
-            if not done:
-                next_action, next_action_prob = choose_next_action(Q)
+
+        # Trajectory buffers:
+        # S[t] = state at time t
+        # A[t] = action taken at time t
+        # R[t+1] = reward observed after action A[t]
+        # B[t] = behavior-policy probability of taking A[t] in S[t]
+        S = [next_state]
+        A = [next_action]
+        R = [0.0]
+        B = [next_action_prob]
+
+        T = np.inf # Time when episode ends
+        t = 0 # Current time step
+
+        # Generate episode and update Q using the given TD method
+        # next_action, next_action_prob = choose_next_action(Q)
+        while True:
+            if t < T:
+                action, action_prob, state = A[t], B[t], S[t]
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                
+                S.append(next_state)
+                R.append(reward)
+
+                if done:
+                    T = t + 1 # Episode ends at time T, so we can update all state-action pairs until T-1
+                else:
+                    next_action, next_action_prob = choose_next_action(Q)
+                    A.append(next_action)
+                    B.append(next_action_prob)
+
+            tau = (t + 1) - args.n # Time whose estimate is being updated
+            if tau >= 0:
+                if args.mode == "sarsa":
+                    G = 0
+                    end = min(tau + args.n, T)
+                    for i in range(tau+1, end+1): # Accumulate rewards until the end of the episode or until tau+n
+                        G = G + (args.gamma ** (i - tau - 1)) * R[i] 
+                    if tau + args.n < T:
+                        G = G + (args.gamma ** args.n) * Q[S[tau + args.n], A[tau + args.n]]
+                
+                                    # Importance sampling for off-policy SARSA.
+                    rho = 1
+                    if args.off_policy:
+                        target_policy = compute_target_policy(Q)
+                        end = min(tau + args.n, T - 1)
+                        for i in range(tau + 1, end + 1):
+                            target_prob = target_policy[S[i], A[i]]
+                            behavior_prob = B[i]
+                            rho = rho * target_prob / behavior_prob
+
+                    Q[S[tau], A[tau]] = Q[S[tau], A[tau]] + args.alpha * (G - Q[S[tau], A[tau]]) * rho
+                
+                elif args.mode == "expected_sarsa":
+                    G = 0
+                    end = min(tau + args.n, T)
+                    for i in range(tau+1, end+1): # Accumulate rewards until the end of the episode or until tau+n
+                        G = G + (args.gamma ** (i - tau - 1)) * R[i] 
+                    
+                    if tau + args.n < T:
+                        target_policy = compute_target_policy(Q)
+                        expected_value = 0
+                        for a in range(env.action_space.n):
+                            expected_value = expected_value + target_policy[S[tau + args.n], a] * Q[S[tau + args.n], a]
+                        G = G + (args.gamma ** args.n) * expected_value
+
+                    rho = 1
+                    if args.off_policy and args.n > 1:
+                        target_policy = compute_target_policy(Q)
+                        end = min(tau + args.n - 1, T - 1)
+                        for i in range(tau + 1, end + 1):
+                            target_prob = target_policy[S[i], A[i]]
+                            behavior_prob = B[i]
+                            rho = rho * target_prob / behavior_prob
+                        
+                    Q[S[tau], A[tau]] += args.alpha * rho * (G - Q[S[tau], A[tau]])
+
+                elif args.mode == "tree_backup":
+                    end = min(tau + args.n, T)
+                    if tau + args.n >= T:
+                        G = R[T]
+                    else:
+                        target_policy = compute_target_policy(Q)
+                        expected_value = 0
+                        for a in range(env.action_space.n):
+                            expected_value = expected_value + target_policy[S[end], a] * Q[S[end], a]
+                        G = R[end] + args.gamma * expected_value
+                    
+                    for i in range(end-1, tau, -1):
+                        target_policy = compute_target_policy(Q)
+                        expected_value = 0
+                        for a in range(env.action_space.n):
+                            if a == A[i]: # Action taken in the episode
+                                expected_value = expected_value + target_policy[S[i], a] * G
+                            else:
+                                expected_value = expected_value + target_policy[S[i], a] * Q[S[i], a]
+                        G = R[i] + args.gamma * expected_value
+                    
+                    Q[S[tau], A[tau]] += args.alpha * (G - Q[S[tau], A[tau]])
+
+            if tau == T - 1:
+                break
+
+            t += 1
 
             # TODO: Perform the update to the state-action value function `Q`, using
             # a TD update with the following parameters:
@@ -90,6 +189,25 @@ def main(args: argparse.Namespace) -> np.ndarray:
             # the updates in the order in which you encountered the state-action
             # pairs and during these updates, use the `compute_target_policy(Q)`
             # with the up-to-date value of `Q`.
+
+            # if args.mode == "sarsa":
+            #     if args.n == 1 and False:
+            #         if done:
+            #             target = reward
+            #         else:
+            #             target = reward + args.gamma * Q[next_state, next_action]
+            #         Q[state, action] = Q[state, action] + args.alpha * (target - Q[state, action])
+            #     # Solve the general case (with n-step and off-policy variants) here.
+            #     if done:
+            #         target = reward
+            #     else:
+            #         target = reward + args.gamma * 
+            # elif args.mode == "expected_sarsa":
+            #     pass # TODO: Implement expected SARSA (with n-step and off-policy variants)
+            # elif args.mode == "tree_backup":
+            #     pass # TODO: Implement tree backup (with n-step and off-policy variants)
+
+
 
     # Return the final action-value function for ReCodEx to validate.
     return Q
