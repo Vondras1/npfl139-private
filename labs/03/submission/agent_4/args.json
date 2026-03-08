@@ -1,0 +1,13 @@
+{
+    "recodex": false,
+    "render_each": 0,
+    "seed": null,
+    "alpha": 0.1,
+    "epsilon": 0.15,
+    "gamma": 0.99,
+    "n": 1,
+    "episodes": 250000,
+    "warmup_episodes": 0,
+    "mode": "monte_carlo",
+    "load_agent": "agent_3"
+}

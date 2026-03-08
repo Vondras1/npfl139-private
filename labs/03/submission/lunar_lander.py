@@ -15,7 +15,7 @@ npfl139.require_version("2526.3")
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
-parser.add_argument("--render_each", default=100, type=int, help="Render some episodes.")
+parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--alpha", default=0.1, type=float, help="Learning rate.")
@@ -82,6 +82,10 @@ def load_agent(folder_path: str) -> tuple[np.ndarray, np.ndarray, dict]:
 
     return Q, C, saved_args
 
+def load_Q_recodex():
+    """Load Q from ReCodEx."""
+    return np.load("Q.npy")
+
 def argmax_with_tolerance(x: np.ndarray, axis: int = -1) -> np.ndarray:
     """Argmax with small tolerance, choosing the value with smallest index on ties"""
     x = np.asarray(x)
@@ -137,7 +141,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
     # TODO: Implement a suitable RL algorithm and train the agent.
     if args.load_agent:
-        Q, C, _ = load_agent(f"03/lunar_lander_agent/{args.load_agent}")
+        Q, C, _ = load_agent(f"lunar_lander_agent/{args.load_agent}")
     else:
         Q = np.zeros((env.observation_space.n, env.action_space.n))
         C = np.zeros((env.observation_space.n, env.action_space.n))
@@ -145,7 +149,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
         # TODO: Load the agent
-
+        Q = load_Q_recodex()
         # Final evaluation
         while True:
             state, done = env.reset(start_evaluation=True)[0], False
