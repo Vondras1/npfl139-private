@@ -15,7 +15,7 @@ npfl139.require_version("2526.3")
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
-parser.add_argument("--render_each", default=100, type=int, help="Render some episodes.")
+parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--alpha", default=0.1, type=float, help="Learning rate.")
@@ -236,7 +236,7 @@ if __name__ == "__main__":
 
     # Create the environment
     main_env = npfl139.EvaluationEnv(
-        npfl139.DiscreteLunarLanderWrapper(gym.make("LunarLander-v3")), main_args.seed, main_args.render_each, report_each=10, evaluate_for=1000)
+        npfl139.DiscreteLunarLanderWrapper(gym.make("LunarLander-v3")), main_args.seed, main_args.render_each, report_each=10, evaluate_for=2000)
 
     Q, C = main(main_env, main_args)
 
