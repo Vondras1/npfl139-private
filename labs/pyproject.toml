@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "npfl139"
-version = "2526.3.0"
+version = "2526.4.0"
 authors = [
   { name="Milan Straka", email="straka@ufal.mff.cuni.cz" },
 ]
@@ -30,8 +30,8 @@ dependencies = [
 #   "ale_py ~= 0.11.2",
 #   # Pybind11 for C++ board games
 #   "pybind11 ~= 3.0.2",
-#   # OpenCV for image manipulation (e.g., ResizeObservation)
-#   "opencv-python ~= 4.13.0.92",
+  # OpenCV for image manipulation (e.g., ResizeObservation)
+  "opencv-python ~= 4.13.0.92",
   # Matplotlib for plotting
   "matplotlib ~= 3.10.8",
 ]
