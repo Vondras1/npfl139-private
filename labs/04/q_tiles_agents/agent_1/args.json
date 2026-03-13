@@ -1,0 +1,11 @@
+{
+    "recodex": false,
+    "render_each": 0,
+    "seed": null,
+    "alpha": 0.05,
+    "epsilon": 0.7,
+    "epsilon_final": 0.05,
+    "epsilon_final_at": 3500,
+    "gamma": 0.99,
+    "tiles": 12
+}
