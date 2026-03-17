@@ -9,6 +9,9 @@ import gymnasium as gym
 import numpy as np
 import torch
 
+from gymnasium.wrappers.vector import ResizeObservation as VectorResizeObservation
+from gymnasium.wrappers.vector import GrayscaleObservation as VectorGrayscaleObservation
+
 import npfl139
 npfl139.require_version("2526.4")
 
@@ -21,14 +24,17 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--continuous", default=0, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
-parser.add_argument("--batch_size", default=8, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
 parser.add_argument("--epsilon", default=0.5, type=float, help="Exploration factor.")
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=2000, type=int, help="Training episodes.")
+parser.add_argument("--epsilon_final_at", default=200, type=int, help="Training episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
-parser.add_argument("--target_update_freq", default=7000, type=int, help="Target update frequency.")
+parser.add_argument("--target_update_freq", default=1000, type=int, help="Target update frequency.")
 parser.add_argument("--evaluation_episodes", default=50, type=int, help="Number of evaluation episodes.")
+parser.add_argument("--num_envs", default=8, type=int, help="Number of parallel environments.")
+parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum number of episodes.")
+
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -84,7 +90,7 @@ class AgentSaver:
             model.load_state_dict(torch.load(model_path, map_location=DEVICE))
             model.eval()
             return model, None
-        
+
         model_path = os.path.join(self.main_folder, agent_name, self.model_name)
         args_path = os.path.join(self.main_folder, agent_name, self.args_name)
 
@@ -126,7 +132,7 @@ def evaluate_training(eval_env, model, args, target_value = 500):
 
             frame_buffer.append(state)
             stacked_state = make_stacked_state(frame_buffer)
-        
+
         returns.append(episode_return)
 
     mean_return = np.mean(returns)
@@ -134,12 +140,12 @@ def evaluate_training(eval_env, model, args, target_value = 500):
     if mean_return > target_value:
         print("Target reached, stopping training.")
         return True
-    
+
     return False
 
 class Network(torch.nn.Module):
     def __init__(self, env, args):
-        super().__init__()        
+        super().__init__()
         self.env = env
         self.args = args
 
@@ -149,29 +155,23 @@ class Network(torch.nn.Module):
         in_channels = C * 4 #(4 stacked images to gain access to speed)
         out_channels = 32
         self.conv1 = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        self.batch_norm1 = torch.nn.BatchNorm2d(out_channels)
         self.relu = torch.nn.ReLU()
-        # x = x.permute(0, 3, 1, 2)
         # 32 x 32 x 32
 
         in_channels = out_channels
         out_channels = 64
         self.conv2 = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        self.batch_norm2 = torch.nn.BatchNorm2d(out_channels)
-        # self.relu = torch.nn.ReLU()
         # 16 x 16 x 64
 
         in_channels = out_channels
         out_channels = 128
         self.conv3 = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        self.batch_norm3 = torch.nn.BatchNorm2d(out_channels)
-        # self.relu = torch.nn.ReLU()
         # 4 x 4 x 128
 
-        in_channels = out_channels
-        out_channels = 256
-        self.conv4 = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        self.batch_norm4 = torch.nn.BatchNorm2d(out_channels)
+        # in_channels = out_channels
+        # out_channels = 256
+        # self.conv4 = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        # self.batch_norm4 = torch.nn.BatchNorm2d(out_channels)
         # self.relu = torch.nn.ReLU()
         # 4 x 4 x 256
 
@@ -179,10 +179,10 @@ class Network(torch.nn.Module):
         self.pool = torch.nn.AdaptiveAvgPool2d((1,1))
 
         # Linear
-        self.fc1 = torch.nn.Linear(out_channels, 256)
-        self.fc2 = torch.nn.Linear(256, action_num)
+        self.fc1 = torch.nn.Linear(out_channels, 128)
+        self.fc2 = torch.nn.Linear(128, action_num)
 
-        self._optimizer = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
+        self._optimizer = torch.optim.AdamW(self.parameters(), lr=args.learning_rate)
         self._loss = torch.nn.MSELoss()
         self.to(DEVICE)
 
@@ -192,26 +192,19 @@ class Network(torch.nn.Module):
         x = x.permute(0, 3, 1, 2).float() / 255.0
 
         x = self.conv1(x)
-        x = self.batch_norm1(x)
         x = self.relu(x)
 
         x = self.conv2(x)
-        x = self.batch_norm2(x)
         x = self.relu(x)
 
         x = self.conv3(x)
-        x = self.batch_norm3(x)
         x = self.relu(x)
 
-        x = self.conv4(x)
-        x = self.batch_norm4(x)
-        x = self.relu(x)
-
-        # (N, 256, 4, 4)
-        x = self.pool(x)              
-        # (N, 256, 1, 1)
+        # (N, 128, 4, 4)
+        x = self.pool(x)
+        # (N, 128, 1, 1)
         x = torch.flatten(x, 1)
-        # (N, 256)
+        # (N, 128)
 
         x = self.fc1(x)
         x = self.relu(x)
@@ -249,11 +242,15 @@ class Network(torch.nn.Module):
     def copy_weights_from(self, other: "Network") -> None:
         self.load_state_dict(other.state_dict())
 
-def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139.EvaluationEnv) -> None:
+def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Set the random seed and the number of threads.
     npfl139.startup(args.seed, args.threads)
     npfl139.global_keras_initializers()  # Use Keras-style Xavier parameter initialization.
 
+    eval_env = npfl139.EvaluationEnv(
+        gym.make("npfl139/CarRacingFS-v3", frame_skip=args.frame_skip, continuous=args.continuous),
+        args.seed, args.render_each, evaluate_for=15, report_each=1)
+    
     # If you want, you can wrap even the `npfl139.EvaluationEnv` with additional wrappers, like
     #   env = gym.wrappers.ResizeObservation(env, (64, 64))
     # or
@@ -263,9 +260,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139
     #   env.reset(options={"start_evaluation": True})
     env = gym.wrappers.ResizeObservation(env, (64, 64))
     env = gym.wrappers.GrayscaleObservation(env, keep_dim=True)
+
     eval_env = gym.wrappers.ResizeObservation(eval_env, (64, 64))
     eval_env = gym.wrappers.GrayscaleObservation(eval_env, keep_dim=True)
-    
+
     # Construct the network
     network = Network(env, args)
 
@@ -273,26 +271,39 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139
     target_network = Network(env, args)
     target_network.copy_weights_from(network)
 
-
     # Replay memory; the `max_length` parameter is its maximum capacity.
     replay_buffer = npfl139.ReplayBuffer(max_length=1_000_000)
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
     epsilon = args.epsilon
 
+    # Create agent latter used for loading and saving models
+    agent = AgentSaver(args, "04/racing", model_name = "q_model_racing.pt")
+
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
         # TODO: Load the agent
+
+        model, _ = agent.load_agent(network, None)
 
         # Final evaluation
         while True:
             # state, done = env.reset(start_evaluation=True)[0], False
             state, done = env.reset(options={"start_evaluation": True})[0], False
+
+            frame_buffer = collections.deque(maxlen=4)
+            for _ in range(4):
+                frame_buffer.append(state)
+            stacked_state = make_stacked_state(frame_buffer)
+
+            episode_return = 0
             while not done:
                 # TODO: Choose a greedy action
-                action = ...
+                action = np.argmax(model.predict(stacked_state[np.newaxis])[0])
                 state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
+                frame_buffer.append(state)
+                stacked_state = make_stacked_state(frame_buffer)
 
     # TODO: Implement a suitable RL algorithm and train the agent.
     #
@@ -311,7 +322,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139
     while training:
         # Perform episode
         state, done = env.reset()[0], False
-        
+
         frame_buffer = collections.deque(maxlen=4)
         for _ in range(4):
             frame_buffer.append(state)
@@ -337,19 +348,47 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139
             if len(replay_buffer) > args.batch_size*10:
                 samples = replay_buffer.sample(args.batch_size, replace=True)
 
-                q_values = network.predict(samples.state)
-                q_values_next = target_network.predict(samples.next_state)
+                # ------ Deep Q Network ------
+                # q_values = network.predict(samples.state)
+                # q_values_next = target_network.predict(samples.next_state)
 
-                targets = samples.reward + args.gamma * np.max(q_values_next, axis=1) * (~samples.done)
+                # targets = samples.reward + args.gamma * np.max(q_values_next, axis=1) * (~samples.done)
+
+                # q_values[np.arange(args.batch_size), samples.action] = targets
+
+                # network.train_step(samples.state, q_values)
+
+                # ------ Double Deep Q Network ------
+                q_values = network.predict(samples.state)
+
+                next_q_online = network.predict(samples.next_state)
+                next_actions = np.argmax(next_q_online, axis=1)
+
+                next_q_target = target_network.predict(samples.next_state)
+                next_q_selected = next_q_target[np.arange(args.batch_size), next_actions]
+
+                targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
 
                 q_values[np.arange(args.batch_size), samples.action] = targets
-
                 network.train_step(samples.state, q_values)
 
                 train_steps += 1
                 if train_steps % args.target_update_freq == 0:
                     print("Update")
                     target_network.copy_weights_from(network)
+
+                # q_values = network.predict(samples.state)
+
+                # next_q_online = network.predict(samples.next_state)
+                # next_actions = np.argmax(next_q_online, axis=1)
+
+                # next_q_target = target_network.predict(samples.next_state)
+                # next_q_selected = next_q_target[np.arange(args.batch_size), next_actions]
+
+                # targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
+
+                # q_values[np.arange(args.batch_size), samples.action] = targets
+                # network.train_step(samples.state, q_values)
 
             state = next_state
             stacked_state = stacked_next_state
@@ -358,15 +397,14 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace, eval_env: npfl139
 
         # evaluate and quit training if target reached
         if episode % 50 == 0:
-            target_reached = evaluate_training(eval_env, network, args, target_value = 450)
-            if target_reached: break # Finish training if target reached
+            target_reached = evaluate_training(eval_env, network, args, target_value = 750)
+            if (target_reached or args.max_episodes < episode): break # Finish training if target reached or max allowed number of episodes exceeded
 
 
         if args.epsilon_final_at:
             epsilon = np.interp(episode + 1, [0, args.epsilon_final_at], [args.epsilon, args.epsilon_final])
 
     # Save model
-    agent = AgentSaver(args, "04/racing", model_name = "q_model_racing.pt")
     agent.save_next_agent(network)
 
 if __name__ == "__main__":
@@ -376,9 +414,5 @@ if __name__ == "__main__":
     main_env = npfl139.EvaluationEnv(
         gym.make("npfl139/CarRacingFS-v3", frame_skip=main_args.frame_skip, continuous=main_args.continuous),
         main_args.seed, main_args.render_each, evaluate_for=15, report_each=1)
-    
-    eval_env = npfl139.EvaluationEnv(
-        gym.make("npfl139/CarRacingFS-v3", frame_skip=main_args.frame_skip, continuous=main_args.continuous),
-        main_args.seed, main_args.render_each, evaluate_for=15, report_each=1)
 
-    main(main_env, main_args, eval_env)
+    main(main_env, main_args)
