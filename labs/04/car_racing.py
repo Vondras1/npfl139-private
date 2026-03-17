@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Team:
+# 1ac5d633-f96f-42a3-846d-31bcb01d041f
+# 9fafb47f-e1c5-4d7c-8ce5-8a6f5bdcd751
+
 import argparse
 import collections
 import os
@@ -18,14 +22,14 @@ npfl139.require_version("2526.4")
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
-parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
+parser.add_argument("--render_each", default=5, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--continuous", default=0, type=int, help="Use continuous actions.")
+parser.add_argument("--continuous", default=1, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
 parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
-parser.add_argument("--epsilon", default=0.5, type=float, help="Exploration factor.")
+parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
 parser.add_argument("--epsilon_final_at", default=200, type=int, help="Training episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
@@ -37,6 +41,18 @@ parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum numb
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+actions = [
+    [-0.5, 0.0, 0.0],   # soft left
+    [-0.8, 0.0, 0.0],   # left
+    [ 0.5, 0.0, 0.0],   # soft right
+    [ 0.8, 0.0, 0.0],   # right
+    [ 0.0, 0.6, 0.0],   # soft gas
+    [ 0.0, 1.0, 0.0],   # gas
+    [ 0.0, 0.0, 0.5],   # soft brake
+    [ 0.0, 0.0, 0.8],   # brake
+]
+actions_n = len(actions)
 
 class AgentSaver:
     def __init__(self, args, main_folder, model_name = "q_model_racing.pt"):
@@ -101,9 +117,9 @@ class AgentSaver:
 
         return model, saved_args
 
-def choose_action(env, epsilon, q_values):
+def choose_action(env, epsilon, q_values, actions_n):
     if np.random.rand() < epsilon:
-        action = np.random.randint(0, env.action_space.n)
+        action = np.random.randint(0, actions_n)
     else:
         action = np.argmax(q_values)
     return action
@@ -126,7 +142,7 @@ def evaluate_training(eval_env, model, args, target_value = 500):
             # Choose a greedy action
             # action = np.argmax(model.predict(state[np.newaxis])[0])
             action = np.argmax(model.predict(stacked_state[np.newaxis])[0])
-            state, reward, terminated, truncated, _ = eval_env.step(action)
+            state, reward, terminated, truncated, _ = eval_env.step(actions[action])
             done = terminated or truncated
             episode_return += reward
 
@@ -141,15 +157,15 @@ def evaluate_training(eval_env, model, args, target_value = 500):
         print("Target reached, stopping training.")
         return True
 
-    return False
+    return False, mean_return
 
 class Network(torch.nn.Module):
-    def __init__(self, env, args):
+    def __init__(self, env, args, actions_n):
         super().__init__()
         self.env = env
         self.args = args
 
-        action_num = env.action_space.n
+        # action_num = env.action_space.n
         H, W, C = env.observation_space.shape
 
         in_channels = C * 4 #(4 stacked images to gain access to speed)
@@ -180,7 +196,7 @@ class Network(torch.nn.Module):
 
         # Linear
         self.fc1 = torch.nn.Linear(out_channels, 128)
-        self.fc2 = torch.nn.Linear(128, action_num)
+        self.fc2 = torch.nn.Linear(128, actions_n)
 
         self._optimizer = torch.optim.AdamW(self.parameters(), lr=args.learning_rate)
         self._loss = torch.nn.MSELoss()
@@ -265,10 +281,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     eval_env = gym.wrappers.GrayscaleObservation(eval_env, keep_dim=True)
 
     # Construct the network
-    network = Network(env, args)
+    network = Network(env, args, actions_n)
 
     # Construct the target network
-    target_network = Network(env, args)
+    target_network = Network(env, args, actions_n)
     target_network.copy_weights_from(network)
 
     # Replay memory; the `max_length` parameter is its maximum capacity.
@@ -296,11 +312,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 frame_buffer.append(state)
             stacked_state = make_stacked_state(frame_buffer)
 
-            episode_return = 0
             while not done:
                 # TODO: Choose a greedy action
                 action = np.argmax(model.predict(stacked_state[np.newaxis])[0])
-                state, reward, terminated, truncated, _ = env.step(action)
+                state, reward, terminated, truncated, _ = env.step(actions[action])
                 done = terminated or truncated
                 frame_buffer.append(state)
                 stacked_state = make_stacked_state(frame_buffer)
@@ -332,10 +347,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             # Choose an action.
             # q_values = network.predict(state[np.newaxis])[0]
             q_values = network.predict(stacked_state[np.newaxis])[0]
-            action = choose_action(env, epsilon, q_values)
+            action = choose_action(env, epsilon, q_values, actions_n)
 
             # Make a step
-            next_state, reward, terminated, truncated, _ = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(actions[action])
             done = terminated or truncated
 
             frame_buffer.append(next_state)
@@ -397,8 +412,11 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
         # evaluate and quit training if target reached
         if episode % 50 == 0:
-            target_reached = evaluate_training(eval_env, network, args, target_value = 750)
-            if (target_reached or args.max_episodes < episode): break # Finish training if target reached or max allowed number of episodes exceeded
+            target_reached, mean_return = evaluate_training(eval_env, network, args, target_value = 900)
+            if (target_reached or args.max_episodes < episode): 
+                break # Finish training if target reached or max allowed number of episodes exceeded
+            elif (mean_return > 750):
+                agent.save_next_agent(network)
 
 
         if args.epsilon_final_at:
