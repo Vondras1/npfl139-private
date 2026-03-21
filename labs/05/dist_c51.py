@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Time to solve the task: 4h
 import argparse
 import collections
 from typing import Callable
@@ -18,15 +19,15 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 parser.add_argument("--verify", default=False, action="store_true", help="Verify the loss computation")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--atoms", default=..., type=int, help="Number of atoms.")
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--epsilon", default=..., type=float, help="Exploration factor.")
-parser.add_argument("--epsilon_final", default=None, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=None, type=int, help="Training episodes.")
-parser.add_argument("--gamma", default=..., type=float, help="Discounting factor.")
-parser.add_argument("--hidden_layer_size", default=..., type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=..., type=float, help="Learning rate.")
-parser.add_argument("--target_update_freq", default=..., type=int, help="Target update frequency.")
+parser.add_argument("--atoms", default=50, type=int, help="Number of atoms.")
+parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
+parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
+parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
+parser.add_argument("--epsilon_final_at", default=500, type=int, help="Training episodes.")
+parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
+parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
+parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
+parser.add_argument("--target_update_freq", default=500, type=int, help="Target update frequency.")
 
 
 class Network:
@@ -41,7 +42,10 @@ class Network:
         # the shape `[batch_size, env.action_space.n, args.atoms]`. The module
         # `torch.nn.Unflatten` might come handy.
         self._model = torch.nn.Sequential(
-            ...
+            torch.nn.Linear(env.observation_space.shape[0], args.hidden_layer_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(args.hidden_layer_size, env.action_space.n*args.atoms),
+            torch.nn.Unflatten(1, (int(env.action_space.n), int(args.atoms)))
         )
 
         # Create `self._model.atoms` as uniform grid from 0 to 500 with `args.atoms` elements.
@@ -54,7 +58,7 @@ class Network:
         self.gamma = args.gamma
 
         # TODO(q_network): Define a suitable optimizer from `torch.optim`.
-        self._optimizer = ...
+        self._optimizer = torch.optim.AdamW(lr=args.learning_rate, params=self._model.parameters())
 
     @staticmethod
     def compute_loss(
@@ -76,7 +80,65 @@ class Network:
         #
         # Your implementation most likely needs to be vectorized to pass ReCodEx time limits. Note that you
         # can add given values to a vector of (possibly repeating) tensor indices using `scatter_add_`.
-        return ...
+        
+        batch_size = actions.shape[0]
+        batch_indices = torch.arange(batch_size, device=actions.device)
+
+        # [batch, # of atoms], for every sample one distribution
+        train_logits = states_logits[batch_indices, actions]
+
+        V_min = atoms[0]
+        V_max = atoms[-1]
+        delta_z = atoms[1] - atoms[0]
+
+        # Get probabilities from next state logits
+        next_states_probs = torch.softmax(next_states_logits.detach(), dim=-1)   # [B, A, N]
+        # Compute Q values from each ditribution (One value for every action)
+        Qs_next = (next_states_probs*atoms).sum(dim=-1)
+        # Choose the best action
+        greedy_actions = torch.argmax(Qs_next, dim=1)
+        # Take the distribution of the greedy action in the next state
+        greedy_actions_distribution = next_states_probs[batch_indices, greedy_actions]
+
+        # shift the next-state atom support by reward and discount
+        tz = rewards[:, None] + gamma * (1 - dones[:, None]) * atoms[None, :]
+        tz = torch.clip(tz, V_min, V_max)
+
+        # project shifted atom values onto the fixed atom grid
+        b = (tz - V_min)/delta_z
+        l = torch.floor(b).long()
+        u = torch.ceil(b).long()
+
+        # Target distribution
+        m = torch.zeros_like(greedy_actions_distribution)   # [B, N]
+
+        # ditribute the probability # HAHAHAHAHAHAHAHA
+        offset = (torch.arange(batch_size, device=actions.device) * atoms.shape[0])[:, None]
+        offset = offset.expand_as(l)
+
+        m.view(-1).scatter_add_(
+            0,
+            (l + offset).reshape(-1),
+            (greedy_actions_distribution * (u.float() - b)).reshape(-1)
+        )
+        m.view(-1).scatter_add_(
+            0,
+            (u + offset).reshape(-1),
+            (greedy_actions_distribution * (b - l.float())).reshape(-1)
+        )
+        eq_mask = (l == u)
+        m.view(-1).scatter_add_(
+            0,
+            (l[eq_mask] + offset[eq_mask]).reshape(-1),
+            greedy_actions_distribution[eq_mask].reshape(-1)
+        )
+
+        # Finall cross-entropy loss between the predicted probabilities `log_probs` and the target distribution `m`
+        log_probs = torch.log_softmax(train_logits, dim=-1)
+        loss = -(m * log_probs).sum(dim=1).mean()
+        return loss
+
+
 
     # The training function defers the computation to the `compute_loss` method.
     #
@@ -99,7 +161,10 @@ class Network:
         self._model.eval()
         with torch.no_grad():
             # TODO: Return all predicted Q-values for the given states.
-            return ...
+            logits = self._model(states)                      # [B, A, N]
+            probs = torch.softmax(logits, dim=-1)             # [B, A, N]
+            q_values = (probs * self._model.atoms).sum(dim=-1)  # [B, A]
+            return q_values
 
     # If you want to use target network, the following method copies weights from
     # a given Network to the current one.
@@ -111,6 +176,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
     # Set the random seed and the number of threads.
     npfl139.startup(args.seed, args.threads)
     npfl139.global_keras_initializers()  # Use Keras-style Xavier parameter initialization.
+
+    eval_env = npfl139.EvaluationEnv(gym.make("CartPole-v1"), args.seed, args.render_each)
 
     # When the `args.verify` is set, just return the loss computation function for validation.
     if args.verify:
@@ -132,7 +199,11 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
             # TODO(q_network): Choose an action.
             # You can compute the q_values of a given state by
             #   q_values = network.predict(state[np.newaxis])[0]
-            action = ...
+            if np.random.rand() < epsilon:
+                action = np.random.randint(0, env.action_space.n)
+            else:
+                q_values = network.predict(state[np.newaxis])[0]
+                action = np.argmax(q_values)
 
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
@@ -150,18 +221,49 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
             # replacement (which is faster, and hence the default) or without.
             # The returned batch is a `Transition` named tuple, each field being
             # a NumPy array containing a batch of corresponding transition components.
+            if len(replay_buffer) > args.batch_size*5:
+                # TRAIN
+                batch = replay_buffer.sample(args.batch_size, replace=True)
+                # network.train(samples)
+                network.train(
+                    batch.state, batch.action, batch.reward, batch.done, batch.next_state
+                )
 
             state = next_state
 
         if args.epsilon_final_at:
             epsilon = np.interp(env.episode + 1, [0, args.epsilon_final_at], [args.epsilon, args.epsilon_final])
 
+        # evaluate and quit training if target reached
+        if env.episode % 200 == 0:
+            returns = []
+            for _ in range(100):
+                state, done = eval_env.reset()[0], False
+                episode_return = 0
+                while not done:
+                    # TODO: Choose a greedy action
+                    q_values = network.predict(state[np.newaxis])[0]
+                    action = np.argmax(q_values)  
+                    state, reward, terminated, truncated, _ = eval_env.step(action)
+                    done = terminated or truncated
+                    episode_return += reward
+                
+                returns.append(episode_return)
+
+            mean_return = np.mean(returns)
+            print("Evaluation return:", mean_return)
+            if mean_return > 450:
+                torch.save(network._model.state_dict(), "q_network_cartpole.pt")
+                print("Target reached, stopping training.")
+                break
+
     # Final evaluation
     while True:
         state, done = env.reset(start_evaluation=True)[0], False
         while not done:
             # TODO(q_network): Choose (greedy) action
-            action = ...
+            q_values = network.predict(state[np.newaxis])[0]
+            action = np.argmax(q_values)
             state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
