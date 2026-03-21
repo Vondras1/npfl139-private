@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+# This file is part of NPFL139 <http://github.com/ufal/npfl139/>.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import argparse
 
 import gymnasium as gym
@@ -17,7 +21,7 @@ class ReturnReporter():
     def __call__(self, obs_t, obs_tp1, action, rew, terminated, truncated, info):
         self.rewards += rew
         if terminated or truncated:
-            print("Episode reward:", self.rewards)
+            print("Episode return:", self.rewards)
             self.rewards = 0
 
 

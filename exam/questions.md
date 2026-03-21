@@ -96,3 +96,41 @@
   buffer, how up-to-date are the priorities [according to which we sample],
   how are unseen transitions boosted, how is importance sampling used to account
   for the change in the sampling distribution). [10]
+
+#### Questions@:, Lecture 5 Questions
+- Describe a data structure that can be used to implement prioritized replay
+  buffer, so that it has given maximum capacity and insertion and sampling runs
+  in time logarithmic with respect to the maximum number of elements. [10]
+
+- How is the action-value function computed in dueling networks? [5]
+
+- Describe a fully connected layer in Noisy nets (parametrization, computation,
+  effective noise generation). [5]
+
+- Write down the distributional Bellman backup operator, define Wasserstein distance,
+  and state in which metric is the distributed Bellman backup operator
+  a $\gamma$-contraction. [5]
+
+- Considering C51, describe how is the distribution of rewards represented
+  and how it is predicted using a neural network. [5]
+
+- Considering distibutional Q network (C51), describe how the predicted
+  distributions are represented (what are the atoms, how do we get their
+  probability), and write down the loss used to train a distributional Q network
+  and an algorithm to compute it (including the mapping of atoms, which does not
+  need to be mathematically flawless, but enough to describe how it should be
+  done). [10]
+
+- Write down the final loss function in Rainbow, describe what atoms are,
+  and explain how is an atom logit computed for a given state and action. [5]
+
+- How exactly are predicted distributions represented in quantile regression?
+  What are the advantages of quantile regression compared to C51? [5]
+
+- Assume we can get samples with a distribution $P$. Write down the
+  loss to minimize if we want to estimate the mean of the distribution and
+  prove it. [5]
+
+- Assume we can get samples with a distribution $P$. Write down the
+  loss to minimize if we want to estimate the median of the distribution and
+  prove it. [5]
