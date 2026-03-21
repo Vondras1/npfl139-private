@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Time to solve the task: 3h
 import argparse
 import collections
 from typing import Generic, TypeVar
@@ -31,7 +32,12 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
 
         # TODO: Create data structures for priorities. To avoid precision loss, represent
         # the priorities using 64-bit floats.
-        ...
+        # Leaf (pure priorities) are positioned between 'max_length' and '2*max_length - 1', root position = 1
+        # left child if i ... 2*i
+        # right child of i ... 2*i + 1
+        # parent of i ... i//2
+        self._priority_tree = np.zeros(2*self._max_length, dtype=np.float64)
+        self._max_priority = 1
 
     def __len__(self) -> int:
         """Return the number of items in the replay buffer."""
@@ -94,8 +100,24 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
         largest priority ever seen, using 1.0 if no priority has been set yet.
         """
         assert 0 <= index < self._len
+        assert priority is None or priority >= 0
         # TODO: Store the priority and perform required updates.
-        ...
+
+        pos_in_tree = self._max_length + index
+        if priority is None:
+            self._priority_tree[pos_in_tree] = self._max_priority
+        else:
+            self._priority_tree[pos_in_tree] = priority
+            self._max_priority = max(self._max_priority, priority) # Update max priority
+
+        # Update parents nodes
+        i = pos_in_tree//2
+        while True:
+            self._priority_tree[i] = self._priority_tree[2*i] + self._priority_tree[2*i + 1]
+            if i == 1:
+                break
+            i = i//2
+
 
     def sample(self, size: int, generator=np.random) -> tuple[NamedTuple, np.ndarray, np.ndarray]:
         """Sample a batch of items from the replay buffer.
@@ -109,14 +131,33 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
           A triple containing the sampled items, their indices, and their (normalized) probabilities.
         """
         samples = (generator.uniform(size=size) + np.arange(size)) / size
+        
+        # Scale samples probabilities to priorities (samples * sum(priorities))
+        samples *= self._priority_tree[1]
 
         # TODO: Generate the sampled items so that the i-th sampled item fulfills:
         # - the sum of probabilities of items preceding the sampled item in the buffer is <= samples[i],
         # - the sum of probabilities of the above items plus the sampled item is > samples[i].
-        indices: np.ndarray = ...
+        indices: np.ndarray = np.empty(size, dtype=np.int32)
+
+        for j, sample in enumerate(samples):
+            idx = 1
+            while True:
+                left_child = idx*2
+                right_child = idx*2 + 1
+
+                if sample < self._priority_tree[left_child]:
+                    idx = left_child
+                else:
+                    sample -= self._priority_tree[left_child] # Subtract left part of the tree (we need relative value)
+                    idx = right_child
+                
+                if idx >= self._max_length:
+                    indices[j] = idx - self._max_length
+                    break
 
         # TODO: Compute the probabilities of the selected indices.
-        probabilities: np.ndarray = ...
+        probabilities: np.ndarray = self._priority_tree[indices+self._max_length] / self._priority_tree[1]
 
         return self[indices], indices, probabilities
 
