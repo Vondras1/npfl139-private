@@ -43,14 +43,14 @@ parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum numb
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 actions = [
-    [-0.5, 0.0, 0.0],   # soft left
-    [-0.8, 0.0, 0.0],   # left
-    [ 0.5, 0.0, 0.0],   # soft right
-    [ 0.8, 0.0, 0.0],   # right
-    [ 0.0, 0.6, 0.0],   # soft gas
-    [ 0.0, 1.0, 0.0],   # gas
-    [ 0.0, 0.0, 0.5],   # soft brake
-    [ 0.0, 0.0, 0.8],   # brake
+    [-0.2, 0.0, 0.0],   # gentle steer left
+    [-0.8, 0.0, 0.0],   # strong steer left
+    [ 0.2, 0.0, 0.0],   # gentle steer right
+    [ 0.8, 0.0, 0.0],   # strong steer right
+    [ 0.0, 0.4, 0.0],   # light throttle
+    [ 0.0, 1.0, 0.0],   # full throttle
+    [ 0.0, 0.0, 0.4],   # light braking
+    [ 0.0, 0.0, 0.8],   # strong braking
 ]
 actions_n = len(actions)
 
@@ -63,10 +63,7 @@ class AgentSaver:
         self.args_name = "args.json"
 
     def save_next_agent(self, model) -> None:
-        """
-        Find the highest numbered agent folder in base_folder and save the new agent as +1.
-        """
-
+        """Find the highest numbered agent folder in base_folder and save the new agent as +1."""
         os.makedirs(self.main_folder, exist_ok=True)
 
         pattern = re.compile(r"agent_(\d+)")
@@ -87,7 +84,6 @@ class AgentSaver:
 
     def save_agent(self, folder_path: str, model) -> None:
         """Save model weights and parser arguments into one folder."""
-
         os.makedirs(folder_path, exist_ok=True)
 
         model_path = os.path.join(folder_path, self.model_name)
@@ -140,7 +136,6 @@ def evaluate_training(eval_env, model, args, target_value = 500):
         episode_return = 0
         while not done:
             # Choose a greedy action
-            # action = np.argmax(model.predict(state[np.newaxis])[0])
             action = np.argmax(model.predict(stacked_state[np.newaxis])[0])
             state, reward, terminated, truncated, _ = eval_env.step(actions[action])
             done = terminated or truncated
@@ -263,6 +258,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     npfl139.startup(args.seed, args.threads)
     npfl139.global_keras_initializers()  # Use Keras-style Xavier parameter initialization.
 
+    # Create evaluation environment
     eval_env = npfl139.EvaluationEnv(
         gym.make("npfl139/CarRacingFS-v3", frame_skip=args.frame_skip, continuous=args.continuous),
         args.seed, args.render_each, evaluate_for=15, report_each=1)
@@ -280,7 +276,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     eval_env = gym.wrappers.ResizeObservation(eval_env, (64, 64))
     eval_env = gym.wrappers.GrayscaleObservation(eval_env, keep_dim=True)
 
-    # Construct the network
+    # Construct the online network
     network = Network(env, args, actions_n)
 
     # Construct the target network
@@ -293,18 +289,16 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
     epsilon = args.epsilon
 
-    # Create agent latter used for loading and saving models
-    agent = AgentSaver(args, "04/racing", model_name = "q_model_racing.pt")
+    # Helper for saving/loading agents
+    agent = AgentSaver(args, "racing", model_name = "q_model_racing.pt")
 
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
         # TODO: Load the agent
-
         model, _ = agent.load_agent(network, None)
 
         # Final evaluation
         while True:
-            # state, done = env.reset(start_evaluation=True)[0], False
             state, done = env.reset(options={"start_evaluation": True})[0], False
 
             frame_buffer = collections.deque(maxlen=4)
@@ -333,6 +327,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # as an additional argument to the above `gym.make_vec`.
     training = True
     train_steps = 0
+    best_return = 0
     episode = 0
     while training:
         # Perform episode
@@ -344,8 +339,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         stacked_state = make_stacked_state(frame_buffer)
 
         while not done:
-            # Choose an action.
-            # q_values = network.predict(state[np.newaxis])[0]
+            # Epsilon-greedy action selection.
             q_values = network.predict(stacked_state[np.newaxis])[0]
             action = choose_action(env, epsilon, q_values, actions_n)
 
@@ -363,16 +357,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             if len(replay_buffer) > args.batch_size*10:
                 samples = replay_buffer.sample(args.batch_size, replace=True)
 
-                # ------ Deep Q Network ------
-                # q_values = network.predict(samples.state)
-                # q_values_next = target_network.predict(samples.next_state)
-
-                # targets = samples.reward + args.gamma * np.max(q_values_next, axis=1) * (~samples.done)
-
-                # q_values[np.arange(args.batch_size), samples.action] = targets
-
-                # network.train_step(samples.state, q_values)
-
                 # ------ Double Deep Q Network ------
                 q_values = network.predict(samples.state)
 
@@ -389,34 +373,22 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
                 train_steps += 1
                 if train_steps % args.target_update_freq == 0:
-                    print("Update")
+                    print("Weights updated")
                     target_network.copy_weights_from(network)
-
-                # q_values = network.predict(samples.state)
-
-                # next_q_online = network.predict(samples.next_state)
-                # next_actions = np.argmax(next_q_online, axis=1)
-
-                # next_q_target = target_network.predict(samples.next_state)
-                # next_q_selected = next_q_target[np.arange(args.batch_size), next_actions]
-
-                # targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
-
-                # q_values[np.arange(args.batch_size), samples.action] = targets
-                # network.train_step(samples.state, q_values)
 
             state = next_state
             stacked_state = stacked_next_state
 
         episode += 1
 
-        # evaluate and quit training if target reached
+        # Evaluate regularly and stop once the target is reached.
         if episode % 50 == 0:
             target_reached, mean_return = evaluate_training(eval_env, network, args, target_value = 900)
+            if ((mean_return > 750 and best_return < mean_return) or target_reached):
+                agent.save_next_agent(network)
+                print(f"Mean return = {mean_return}")
             if (target_reached or args.max_episodes < episode): 
                 break # Finish training if target reached or max allowed number of episodes exceeded
-            elif (mean_return > 750):
-                agent.save_next_agent(network)
 
 
         if args.epsilon_final_at:
