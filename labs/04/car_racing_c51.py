@@ -28,48 +28,31 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--continuous", default=1, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
-parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
 parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=200, type=int, help="Training episodes.")
+parser.add_argument("--epsilon_final_at", default=500, type=int, help="Training episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.")
 parser.add_argument("--target_update_freq", default=1000, type=int, help="Target update frequency.")
 parser.add_argument("--evaluation_episodes", default=50, type=int, help="Number of evaluation episodes.")
 parser.add_argument("--num_envs", default=8, type=int, help="Number of parallel environments.")
 parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum number of episodes.")
+parser.add_argument("--atoms", default=100, type=int, help="Number of atoms.")
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# actions = [
-#     [-0.2, 0.0, 0.0],   # gentle steer left
-#     [-0.8, 0.0, 0.0],   # strong steer left
-#     [ 0.2, 0.0, 0.0],   # gentle steer right
-#     [ 0.8, 0.0, 0.0],   # strong steer right
-#     [ 0.0, 0.4, 0.0],   # light throttle
-#     [ 0.0, 1.0, 0.0],   # full throttle
-#     [ 0.0, 0.0, 0.4],   # light braking
-#     [ 0.0, 0.0, 0.8],   # strong braking
-# ]
-actions = np.array([
-    [-0.33, 0.0, 0.0],   # soft soft left
-    [-0.66, 0.0, 0.0],   # soft left
-    [-1.0,  0.0, 0.0],   # left
-    [ 0.33, 0.0, 0.0],   # soft soft right
-    [ 0.66, 0.0, 0.0],   # soft right
-    [ 1.0,  0.0, 0.0],   # right
-    [ 0.0,  0.33, 0.0],  # soft gas
-    [ 0.0,  0.66, 0.0],  # gas
-    [ 0.0,  1.0, 0.0],   # full gas
-    [ 0.0,  0.0, 0.33],  # soft soft brake
-    [ 0.0,  0.0, 0.66],  # soft brake
-    [ 0.0,  0.0, 1.0],   # brake
-    [-0.33, 0.33, 0.0],   # left + gas
-    [ 0.33, 0.33, 0.0],   # right + gas
-    [-0.33, 0.0, 0.33],   # left + brake
-    [ 0.33, 0.0, 0.33],   # right + brake
-], dtype=np.float32)
+actions = [
+    [-0.2, 0.0, 0.0],   # gentle steer left
+    [-0.8, 0.0, 0.0],   # strong steer left
+    [ 0.2, 0.0, 0.0],   # gentle steer right
+    [ 0.8, 0.0, 0.0],   # strong steer right
+    [ 0.0, 0.4, 0.0],   # light throttle
+    [ 0.0, 1.0, 0.0],   # full throttle
+    [ 0.0, 0.0, 0.4],   # light braking
+    [ 0.0, 0.0, 0.8],   # strong braking
+]
 actions_n = len(actions)
 
 class AgentSaver:
@@ -168,7 +151,7 @@ def evaluate_training(eval_env, model, args, target_value = 500):
     print("Evaluation return:", mean_return)
     if mean_return > target_value:
         print("Target reached, stopping training.")
-        return True
+        return True, mean_return
 
     return False, mean_return
 
@@ -180,6 +163,10 @@ class Network(torch.nn.Module):
 
         # action_num = env.action_space.n
         H, W, C = env.observation_space.shape
+
+        # Create `self._model.atoms` as uniform grid from 0 to 500 with `args.atoms` elements.
+        # We create them as a buffer in `self._model` so they are automatically moved with `.to`.
+        self.register_buffer("atoms", torch.linspace(-200, 1000, args.atoms))
 
         in_channels = C * 4 #(4 stacked images to gain access to speed)
         out_channels = 32
@@ -208,8 +195,9 @@ class Network(torch.nn.Module):
         self.pool = torch.nn.AdaptiveAvgPool2d((1,1))
 
         # Linear
-        self.fc1 = torch.nn.Linear(out_channels, 128)
-        self.fc2 = torch.nn.Linear(128, actions_n)
+        self.fc1 = torch.nn.Linear(out_channels, 256)
+        self.fc2 = torch.nn.Linear(256, actions_n*args.atoms)
+        self.unflattern = torch.nn.Unflatten(1, (int(actions_n), int(args.atoms)))
 
         self._optimizer = torch.optim.AdamW(self.parameters(), lr=args.learning_rate)
         self._loss = torch.nn.MSELoss()
@@ -239,32 +227,157 @@ class Network(torch.nn.Module):
         x = self.relu(x)
 
         x = self.fc2(x)
+        x = self.unflattern(x)
         return x
+    
 
-    # Define a training method. Generally you have two possibilities
-    # - pass new q_values of all actions for a given state; all but one are the same as before
-    # - pass only one new q_value for a given state, and include the index of the action to which
-    #   the new q_value belongs
-    # The code below implements the first option, but you can change it if you want.
-    #
-    # The `npfl139.typed_torch_function` automatically converts input arguments
-    # to PyTorch tensors of given type, and converts the result to a NumPy array.
-    @npfl139.typed_torch_function(DEVICE, torch.float32, torch.float32)
-    def train_step(self, states: torch.Tensor, q_values: torch.Tensor) -> None:
-        self.train()
-        predictions = self(states)
-        loss = self._loss(predictions, q_values)
+    @staticmethod
+    def compute_loss(
+        states_logits: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, dones: torch.Tensor,
+        next_states_logits_online: torch.Tensor, next_states_logits_target: torch.Tensor, atoms: torch.Tensor, gamma: float,
+    ) -> torch.Tensor:
+        # TODO: Implement the loss computation according to the C51 algorithm.
+        # - The `states_logits` are current state logits of shape `[batch_size, actions, atoms]`.
+        # - The `actions` are the integral actions taken in the states, of shape `[batch_size]`.
+        # - The `rewards` are the rewards obtained after taking the actions, of shape `[batch_size]`.
+        # - The `dones` are `torch.float32` indicating whether the episode ended, of shape `[batch_size]`.
+        # - The `next_states_logits_online` are logits of the next states, of shape `[batch_size, actions, atoms]`.
+        #   Because they should not be backpropagated through, use an appropriate `.detach()` call.
+        # - The `next_states_logits_target` are logits of the target next states, of shape `[batch_size, actions, atoms]`.
+        #   (obtained by target network), use an appropriate `.detach()` call.
+        # - The `atoms` are the atom values. Your implementation must handle any number of atoms. The
+        #   `atoms[0]` is V_MIN (the minimum atom value), `atoms[-1]` is V_MAX (the maximum atom value),
+        #   and use `atoms[1] - atoms[0]` as the distance between two consecutive atoms. You can
+        #   assume that one of the atoms is always 0.
+        # The resulting loss should be the mean of the cross-entropy losses of the individual batch examples.
+        #
+        # Your implementation most likely needs to be vectorized to pass ReCodEx time limits. Note that you
+        # can add given values to a vector of (possibly repeating) tensor indices using `scatter_add_`.
+        
+        batch_size = actions.shape[0]
+        batch_indices = torch.arange(batch_size, device=actions.device)
+
+        # [batch, # of atoms], for every sample one distribution
+        train_logits = states_logits[batch_indices, actions]
+
+        V_min = atoms[0]
+        V_max = atoms[-1]
+        delta_z = atoms[1] - atoms[0]
+
+        # Get probabilities from next state logits
+        next_probs_online = torch.softmax(next_states_logits_online.detach(), dim=-1)   # [B, A, N]
+        next_probs_target = torch.softmax(next_states_logits_target.detach(), dim=-1)   # [B, A, N]
+        # Compute Q values from each ditribution (One value for every action). From ONLINE network
+        Qs_next = (next_probs_online*atoms).sum(dim=-1)
+        # Choose the best action
+        greedy_actions = torch.argmax(Qs_next, dim=1)
+        # From target network take the distribution of the greedy action in the next state
+        greedy_actions_distribution = next_probs_target[batch_indices, greedy_actions]
+
+        # shift the next-state atom support by reward and discount
+        tz = rewards[:, None] + gamma * (1 - dones[:, None]) * atoms[None, :]
+        tz = torch.clip(tz, V_min, V_max)
+
+        # project shifted atom values onto the fixed atom grid
+        b = (tz - V_min)/delta_z
+        l = torch.floor(b).long()
+        u = torch.ceil(b).long()
+
+        # Target distribution
+        m = torch.zeros_like(greedy_actions_distribution)   # [B, N]
+
+        # ditribute the probability # HAHAHAHAHAHAHAHA
+        offset = (torch.arange(batch_size, device=actions.device) * atoms.shape[0])[:, None]
+        offset = offset.expand_as(l)
+
+        m.view(-1).scatter_add_(
+            0,
+            (l + offset).reshape(-1),
+            (greedy_actions_distribution * (u.float() - b)).reshape(-1)
+        )
+        m.view(-1).scatter_add_(
+            0,
+            (u + offset).reshape(-1),
+            (greedy_actions_distribution * (b - l.float())).reshape(-1)
+        )
+        eq_mask = (l == u)
+        m.view(-1).scatter_add_(
+            0,
+            (l[eq_mask] + offset[eq_mask]).reshape(-1),
+            greedy_actions_distribution[eq_mask].reshape(-1)
+        )
+
+        # Finall cross-entropy loss between the predicted probabilities `log_probs` and the target distribution `m`
+        log_probs = torch.log_softmax(train_logits, dim=-1)
+        loss = -(m * log_probs).sum(dim=1).mean()
+        return loss
+
+
+    # # Define a training method. Generally you have two possibilities
+    # # - pass new q_values of all actions for a given state; all but one are the same as before
+    # # - pass only one new q_value for a given state, and include the index of the action to which
+    # #   the new q_value belongs
+    # # The code below implements the first option, but you can change it if you want.
+    # #
+    # # The `npfl139.typed_torch_function` automatically converts input arguments
+    # # to PyTorch tensors of given type, and converts the result to a NumPy array.
+    # @npfl139.typed_torch_function(DEVICE, torch.float32, torch.float32)
+    # def train_step(self, states: torch.Tensor, q_values: torch.Tensor) -> None:
+    #     self.train()
+    #     predictions = self(states)
+    #     loss = self._loss(predictions, q_values)
+
+    #     self._optimizer.zero_grad()
+    #     loss.backward()
+    #     with torch.no_grad():
+    #         self._optimizer.step()
+
+    # The training function defers the computation to the `compute_loss` method.
+    def train_step(self, states, actions, rewards, dones, next_states, target_model) -> None:
+        super().train()
+
+        states = torch.as_tensor(states, dtype=torch.float32, device=DEVICE)
+        actions = torch.as_tensor(actions, dtype=torch.int64, device=DEVICE)
+        rewards = torch.as_tensor(rewards, dtype=torch.float32, device=DEVICE)
+        dones = torch.as_tensor(dones, dtype=torch.float32, device=DEVICE)
+        next_states = torch.as_tensor(next_states, dtype=torch.float32, device=DEVICE)
+
+        states_logits = self(states)
+        next_states_logits_online = self(next_states)
+
+        with torch.no_grad():
+            next_states_logits_target = target_model(next_states)
+
+        loss = self.compute_loss(
+            states_logits,
+            actions,
+            rewards,
+            dones,
+            next_states_logits_online,
+            next_states_logits_target,
+            self.atoms,
+            self.args.gamma,
+        )
 
         self._optimizer.zero_grad()
         loss.backward()
-        with torch.no_grad():
-            self._optimizer.step()
+        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=10.0)
+        self._optimizer.step()
 
+    # @npfl139.typed_torch_function(DEVICE, torch.float32)
+    # def predict(self, states: torch.Tensor) -> np.ndarray:
+    #     self.eval()
+    #     with torch.no_grad():
+    #         return self(states)
     @npfl139.typed_torch_function(DEVICE, torch.float32)
     def predict(self, states: torch.Tensor) -> np.ndarray:
         self.eval()
         with torch.no_grad():
-            return self(states)
+            # TODO: Return all predicted Q-values for the given states.
+            logits = self(states)                      # [B, A, N]
+            probs = torch.softmax(logits, dim=-1)             # [B, A, N]
+            q_values = (probs * self.atoms).sum(dim=-1)  # [B, A]
+            return q_values
 
     # If you want to use target network, the following method copies weights from
     # a given Network to the current one.
@@ -308,7 +421,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     epsilon = args.epsilon
 
     # Helper for saving/loading agents
-    agent = AgentSaver(args, "racing", model_name = "q_model_racing.pt")
+    agent = AgentSaver(args, "racing_c51", model_name = "q_model_racing.pt")
 
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
@@ -372,22 +485,34 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             # replay_buffer.append(Transition(state, action, reward, done, next_state))
             replay_buffer.append(Transition(stacked_state, action, reward, done, stacked_next_state))
 
-            if len(replay_buffer) > args.batch_size*10:
+            if len(replay_buffer) > args.batch_size*30:
                 samples = replay_buffer.sample(args.batch_size, replace=True)
 
-                # ------ Double Deep Q Network ------
-                q_values = network.predict(samples.state)
+                # Double C51:
+                # - online network selects next action
+                # - target network provides next-state distribution
+                network.train_step(
+                    samples.state,
+                    samples.action,
+                    samples.reward,
+                    samples.done,
+                    samples.next_state,
+                    target_network,
+                )
 
-                next_q_online = network.predict(samples.next_state)
-                next_actions = np.argmax(next_q_online, axis=1)
+                # # ------ Double Deep Q Network ------
+                # q_values = network.predict(samples.state)
 
-                next_q_target = target_network.predict(samples.next_state)
-                next_q_selected = next_q_target[np.arange(args.batch_size), next_actions]
+                # next_q_online = network.predict(samples.next_state)
+                # next_actions = np.argmax(next_q_online, axis=1)
 
-                targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
+                # next_q_target = target_network.predict(samples.next_state)
+                # next_q_selected = next_q_target[np.arange(args.batch_size), next_actions]
 
-                q_values[np.arange(args.batch_size), samples.action] = targets
-                network.train_step(samples.state, q_values)
+                # targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
+
+                # q_values[np.arange(args.batch_size), samples.action] = targets
+                # network.train_step(samples.state, q_values)
 
                 train_steps += 1
                 if train_steps % args.target_update_freq == 0:
@@ -405,6 +530,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             if ((mean_return > 750 and best_return < mean_return) or target_reached):
                 agent.save_next_agent(network)
                 print(f"Mean return = {mean_return}")
+                best_return = mean_return
             if (target_reached or args.max_episodes < episode): 
                 break # Finish training if target reached or max allowed number of episodes exceeded
 

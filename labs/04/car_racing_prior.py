@@ -9,6 +9,9 @@ import os
 import re
 import json
 
+from typing import Generic, TypeVar
+NamedTuple = TypeVar("NamedTuple")  # A generic type fulfilling the NamedTuple protocol.
+
 import gymnasium as gym
 import numpy as np
 import torch
@@ -29,29 +32,30 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 parser.add_argument("--continuous", default=1, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
 parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
-parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
+parser.add_argument("--epsilon", default=0.8, type=float, help="Exploration factor.") # 0.4
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=200, type=int, help="Training episodes.")
+parser.add_argument("--epsilon_final_at", default=500, type=int, help="Training episodes.") # 200
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.") # 0.001
 parser.add_argument("--target_update_freq", default=1000, type=int, help="Target update frequency.")
 parser.add_argument("--evaluation_episodes", default=50, type=int, help="Number of evaluation episodes.")
 parser.add_argument("--num_envs", default=8, type=int, help="Number of parallel environments.")
 parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum number of episodes.")
-
+parser.add_argument("--beta", default=0.5, type=float, help="Prioritized sampling - weights.")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# actions = [
-#     [-0.2, 0.0, 0.0],   # gentle steer left
-#     [-0.8, 0.0, 0.0],   # strong steer left
-#     [ 0.2, 0.0, 0.0],   # gentle steer right
-#     [ 0.8, 0.0, 0.0],   # strong steer right
-#     [ 0.0, 0.4, 0.0],   # light throttle
-#     [ 0.0, 1.0, 0.0],   # full throttle
-#     [ 0.0, 0.0, 0.4],   # light braking
-#     [ 0.0, 0.0, 0.8],   # strong braking
-# ]
+actions = [
+    [-0.2, 0.0, 0.0],   # gentle steer left
+    [-0.8, 0.0, 0.0],   # strong steer left
+    [ 0.2, 0.0, 0.0],   # gentle steer right
+    [ 0.8, 0.0, 0.0],   # strong steer right
+    [ 0.0, 0.4, 0.0],   # light throttle
+    [ 0.0, 1.0, 0.0],   # full throttle
+    [ 0.0, 0.0, 0.4],   # light braking
+    [ 0.0, 0.0, 0.8],   # strong braking
+]
+
 actions = np.array([
     [-0.33, 0.0, 0.0],   # soft soft left
     [-0.66, 0.0, 0.0],   # soft left
@@ -70,6 +74,7 @@ actions = np.array([
     [-0.33, 0.0, 0.33],   # left + brake
     [ 0.33, 0.0, 0.33],   # right + brake
 ], dtype=np.float32)
+
 actions_n = len(actions)
 
 class AgentSaver:
@@ -172,6 +177,151 @@ def evaluate_training(eval_env, model, args, target_value = 500):
 
     return False, mean_return
 
+
+class PrioritizedReplayBuffer(Generic[NamedTuple]):
+    """A prioritized replay buffer with a limited capacity.
+
+    The individual items must be named tuples of data convertible to Numpy
+    arrays, each with a fixed shape. The whole replay buffer stores items in an
+    efficient manner by keeping a single named tuple of Numpy arrays containing
+    all the data."""
+    def __init__(self, max_length: int) -> None:
+        self._len: int = 0
+        self._max_length: int = max_length
+        self._offset: int = 0  # Used when the buffer is full and overwriting in a circular manner.
+        self._data: NamedTuple | None = None
+
+        # TODO: Create data structures for priorities. To avoid precision loss, represent
+        # the priorities using 64-bit floats.
+        # Leaf (pure priorities) are positioned between 'max_length' and '2*max_length - 1', root position = 1
+        # left child if i ... 2*i
+        # right child of i ... 2*i + 1
+        # parent of i ... i//2
+        self._priority_tree = np.zeros(2*self._max_length, dtype=np.float64)
+        self._max_priority = 1
+
+    def __len__(self) -> int:
+        """Return the number of items in the replay buffer."""
+        return self._len
+
+    @property
+    def max_length(self) -> int:
+        """Return the maximum capacity of the replay buffer."""
+        return self._max_length
+
+    @property
+    def data(self) -> NamedTuple | None:
+        """Return the data stored in the replay buffer as a named tuple of Numpy arrays."""
+        return self._data
+
+    def __getitem__(self, index: int | np.ndarray) -> NamedTuple:
+        """Return the item or items at the given index or indices.
+
+        Returns:
+          A NamedTuple of Numpy arrays containing the item(s) at the given index(es).
+        """
+        return self._data._make(value[index] for value in self._data)
+
+    def append(self, item: NamedTuple, priority: float | None = None) -> int:
+        """Append a new item with an optional non-negative priority to the replay buffer.
+
+        If the buffer is empty, it is allocated to full capacity using Numpy
+        arrays of shapes and data types of the provided item.
+
+        The priority must be non-negative. If no priority is provided, use the
+        largest priority ever seen, using 1.0 if no priority has been set yet.
+
+        Returns:
+          The index at which the item was stored.
+        """
+        # Allocate the buffer on the first append.
+        if not self._len:
+            values = [np.empty((self._max_length, *value.shape), dtype=value.dtype) for value in map(np.asarray, item)]
+            self._data = item._make(values)
+
+        # Select the index to store the new item, updating the sizes.
+        if self._len < self._max_length:
+            index, self._len = self._len, self._len + 1
+        else:
+            index, self._offset = self._offset, (self._offset + 1) % self._max_length
+
+        # Store the new item on the given index.
+        for i, value in enumerate(item):
+            self._data[i][index] = value
+
+        # Store the priority and perform required updates.
+        self.update_priority(index, priority)
+
+        return index
+
+    def update_priority(self, index: int, priority: float | None = None) -> None:
+        """Update the priority of an item in the replay buffer.
+
+        The priority must be non-negative. If no priority is provided, use the
+        largest priority ever seen, using 1.0 if no priority has been set yet.
+        """
+        assert 0 <= index < self._len
+        assert priority is None or priority >= 0
+        # TODO: Store the priority and perform required updates.
+
+        pos_in_tree = self._max_length + index
+        if priority is None:
+            self._priority_tree[pos_in_tree] = self._max_priority
+        else:
+            self._priority_tree[pos_in_tree] = priority
+            self._max_priority = max(self._max_priority, priority) # Update max priority
+
+        # Update parents nodes
+        i = pos_in_tree//2
+        while True:
+            self._priority_tree[i] = self._priority_tree[2*i] + self._priority_tree[2*i + 1]
+            if i == 1:
+                break
+            i = i//2
+
+
+    def sample(self, size: int, generator=np.random) -> tuple[NamedTuple, np.ndarray, np.ndarray]:
+        """Sample a batch of items from the replay buffer.
+
+        The cumulative probabilities of the items to sample are computed using
+        `(generator.uniform(size=size) + np.arange(size)) / size`. This way,
+        there is a single sample in every 1/size interval, decreasing the chance
+        of sampling the same item multiple times.
+
+        Returns:
+          A triple containing the sampled items, their indices, and their (normalized) probabilities.
+        """
+        samples = (generator.uniform(size=size) + np.arange(size)) / size
+        
+        # Scale samples probabilities to priorities (samples * sum(priorities))
+        samples *= self._priority_tree[1]
+
+        # TODO: Generate the sampled items so that the i-th sampled item fulfills:
+        # - the sum of probabilities of items preceding the sampled item in the buffer is <= samples[i],
+        # - the sum of probabilities of the above items plus the sampled item is > samples[i].
+        indices: np.ndarray = np.empty(size, dtype=np.int32)
+
+        for j, sample in enumerate(samples):
+            idx = 1
+            while True:
+                left_child = idx*2
+                right_child = idx*2 + 1
+
+                if sample < self._priority_tree[left_child]:
+                    idx = left_child
+                else:
+                    sample -= self._priority_tree[left_child] # Subtract left part of the tree (we need relative value)
+                    idx = right_child
+                
+                if idx >= self._max_length:
+                    indices[j] = idx - self._max_length
+                    break
+
+        # TODO: Compute the probabilities of the selected indices.
+        probabilities: np.ndarray = self._priority_tree[indices+self._max_length] / self._priority_tree[1]
+
+        return self[indices], indices, probabilities
+
 class Network(torch.nn.Module):
     def __init__(self, env, args, actions_n):
         super().__init__()
@@ -249,16 +399,20 @@ class Network(torch.nn.Module):
     #
     # The `npfl139.typed_torch_function` automatically converts input arguments
     # to PyTorch tensors of given type, and converts the result to a NumPy array.
-    @npfl139.typed_torch_function(DEVICE, torch.float32, torch.float32)
-    def train_step(self, states: torch.Tensor, q_values: torch.Tensor) -> None:
+    @npfl139.typed_torch_function(DEVICE, torch.float32, torch.float32, torch.float32)
+    def train_step(self, states: torch.Tensor, q_values: torch.Tensor, weights: np.ndarray) -> None:
         self.train()
         predictions = self(states)
-        loss = self._loss(predictions, q_values)
+
+        # loss = self._loss(predictions, q_values)
+        # Weighted loss
+        squared_error = (predictions - q_values) ** 2
+        per_sample_loss = torch.sum(squared_error, dim=1)
+        loss = torch.mean(weights * per_sample_loss)
 
         self._optimizer.zero_grad()
         loss.backward()
-        with torch.no_grad():
-            self._optimizer.step()
+        self._optimizer.step()
 
     @npfl139.typed_torch_function(DEVICE, torch.float32)
     def predict(self, states: torch.Tensor) -> np.ndarray:
@@ -302,13 +456,14 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     target_network.copy_weights_from(network)
 
     # Replay memory; the `max_length` parameter is its maximum capacity.
-    replay_buffer = npfl139.ReplayBuffer(max_length=1_000_000)
+    # replay_buffer = npfl139.ReplayBuffer(max_length=1_000_000)
+    replay_buffer = PrioritizedReplayBuffer(max_length=1_000_000)
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
     epsilon = args.epsilon
 
     # Helper for saving/loading agents
-    agent = AgentSaver(args, "racing", model_name = "q_model_racing.pt")
+    agent = AgentSaver(args, "racing_prior", model_name = "q_model_racing.pt")
 
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
@@ -373,7 +528,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             replay_buffer.append(Transition(stacked_state, action, reward, done, stacked_next_state))
 
             if len(replay_buffer) > args.batch_size*10:
-                samples = replay_buffer.sample(args.batch_size, replace=True)
+                # samples = replay_buffer.sample(args.batch_size, replace=True)
+                samples, indices, probabilities = replay_buffer.sample(args.batch_size)
 
                 # ------ Double Deep Q Network ------
                 q_values = network.predict(samples.state)
@@ -386,9 +542,27 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
                 targets = samples.reward + args.gamma * next_q_selected * (~samples.done)
 
-                q_values[np.arange(args.batch_size), samples.action] = targets
-                network.train_step(samples.state, q_values)
+                # q_values[np.arange(args.batch_size), samples.action] = targets
+                # network.train_step(samples.state, q_values)
 
+                # --------- Update priority buffer ---------
+                # TD error before overwriting q_values
+                td_errors = targets - q_values[np.arange(args.batch_size), samples.action]
+
+                # Create training targets
+                q_values[np.arange(args.batch_size), samples.action] = targets
+
+                weights = ((1/len(replay_buffer)) / probabilities )**args.beta
+                weights = weights / weights.max()
+
+                network.train_step(samples.state, q_values, weights)
+
+                # Update priorities
+                new_priorities = np.abs(td_errors) + 1e-6
+                for idx, priority in zip(indices, new_priorities):
+                    replay_buffer.update_priority(int(idx), float(priority))
+                
+        
                 train_steps += 1
                 if train_steps % args.target_update_freq == 0:
                     print("Weights updated")
