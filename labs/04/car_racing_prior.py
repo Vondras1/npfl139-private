@@ -31,30 +31,30 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--continuous", default=1, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
-parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
 parser.add_argument("--epsilon", default=0.8, type=float, help="Exploration factor.") # 0.4
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=500, type=int, help="Training episodes.") # 200
+parser.add_argument("--epsilon_final_at", default=600, type=int, help="Training episodes.") # 200
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.") # 0.001
-parser.add_argument("--target_update_freq", default=1000, type=int, help="Target update frequency.")
+parser.add_argument("--target_update_freq", default=2000, type=int, help="Target update frequency.")
 parser.add_argument("--evaluation_episodes", default=50, type=int, help="Number of evaluation episodes.")
 parser.add_argument("--num_envs", default=8, type=int, help="Number of parallel environments.")
-parser.add_argument("--max_episodes", default=1000, type=int, help="Maximum number of episodes.")
+parser.add_argument("--max_episodes", default=3000, type=int, help="Maximum number of episodes.")
 parser.add_argument("--beta", default=0.5, type=float, help="Prioritized sampling - weights.")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-actions = [
-    [-0.2, 0.0, 0.0],   # gentle steer left
-    [-0.8, 0.0, 0.0],   # strong steer left
-    [ 0.2, 0.0, 0.0],   # gentle steer right
-    [ 0.8, 0.0, 0.0],   # strong steer right
-    [ 0.0, 0.4, 0.0],   # light throttle
-    [ 0.0, 1.0, 0.0],   # full throttle
-    [ 0.0, 0.0, 0.4],   # light braking
-    [ 0.0, 0.0, 0.8],   # strong braking
-]
+# actions = [
+#     [-0.2, 0.0, 0.0],   # gentle steer left
+#     [-0.8, 0.0, 0.0],   # strong steer left
+#     [ 0.2, 0.0, 0.0],   # gentle steer right
+#     [ 0.8, 0.0, 0.0],   # strong steer right
+#     [ 0.0, 0.4, 0.0],   # light throttle
+#     [ 0.0, 1.0, 0.0],   # full throttle
+#     [ 0.0, 0.0, 0.4],   # light braking
+#     [ 0.0, 0.0, 0.8],   # strong braking
+# ]
 
 actions = np.array([
     [-0.33, 0.0, 0.0],   # soft soft left
