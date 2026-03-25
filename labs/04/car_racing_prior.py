@@ -31,49 +31,51 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--continuous", default=1, type=int, help="Use continuous actions.")
 parser.add_argument("--frame_skip", default=4, type=int, help="Frame skip.")
-parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
 parser.add_argument("--epsilon", default=0.8, type=float, help="Exploration factor.") # 0.4
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
 parser.add_argument("--epsilon_final_at", default=600, type=int, help="Training episodes.") # 200
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.") # 0.001
-parser.add_argument("--target_update_freq", default=2000, type=int, help="Target update frequency.")
-parser.add_argument("--evaluation_episodes", default=50, type=int, help="Number of evaluation episodes.")
+parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.") # 0.001
+parser.add_argument("--target_update_freq", default=1500, type=int, help="Target update frequency.")
+parser.add_argument("--evaluation_episodes", default=30, type=int, help="Number of evaluation episodes.")
 parser.add_argument("--num_envs", default=8, type=int, help="Number of parallel environments.")
-parser.add_argument("--max_episodes", default=3000, type=int, help="Maximum number of episodes.")
+parser.add_argument("--max_episodes", default=2000, type=int, help="Maximum number of episodes.")
 parser.add_argument("--beta", default=0.5, type=float, help="Prioritized sampling - weights.")
+parser.add_argument("--beta_final", default=1, type=float, help="Final beta.")
+parser.add_argument("--beta_final_at", default=800, type=int, help="Training episodes.") # 200
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# actions = [
-#     [-0.2, 0.0, 0.0],   # gentle steer left
-#     [-0.8, 0.0, 0.0],   # strong steer left
-#     [ 0.2, 0.0, 0.0],   # gentle steer right
-#     [ 0.8, 0.0, 0.0],   # strong steer right
-#     [ 0.0, 0.4, 0.0],   # light throttle
-#     [ 0.0, 1.0, 0.0],   # full throttle
-#     [ 0.0, 0.0, 0.4],   # light braking
-#     [ 0.0, 0.0, 0.8],   # strong braking
-# ]
+actions = [
+    [-0.2, 0.0, 0.0],   # gentle steer left
+    [-0.8, 0.0, 0.0],   # strong steer left
+    [ 0.2, 0.0, 0.0],   # gentle steer right
+    [ 0.8, 0.0, 0.0],   # strong steer right
+    [ 0.0, 0.4, 0.0],   # light throttle
+    [ 0.0, 1.0, 0.0],   # full throttle
+    [ 0.0, 0.0, 0.4],   # light braking
+    [ 0.0, 0.0, 0.8],   # strong braking
+]
 
-actions = np.array([
-    [-0.33, 0.0, 0.0],   # soft soft left
-    [-0.66, 0.0, 0.0],   # soft left
-    [-1.0,  0.0, 0.0],   # left
-    [ 0.33, 0.0, 0.0],   # soft soft right
-    [ 0.66, 0.0, 0.0],   # soft right
-    [ 1.0,  0.0, 0.0],   # right
-    [ 0.0,  0.33, 0.0],  # soft gas
-    [ 0.0,  0.66, 0.0],  # gas
-    [ 0.0,  1.0, 0.0],   # full gas
-    [ 0.0,  0.0, 0.33],  # soft soft brake
-    [ 0.0,  0.0, 0.66],  # soft brake
-    [ 0.0,  0.0, 1.0],   # brake
-    [-0.33, 0.33, 0.0],   # left + gas
-    [ 0.33, 0.33, 0.0],   # right + gas
-    [-0.33, 0.0, 0.33],   # left + brake
-    [ 0.33, 0.0, 0.33],   # right + brake
-], dtype=np.float32)
+# actions = np.array([
+#     [-0.33, 0.0, 0.0],   # soft soft left
+#     [-0.66, 0.0, 0.0],   # soft left
+#     [-1.0,  0.0, 0.0],   # left
+#     [ 0.33, 0.0, 0.0],   # soft soft right
+#     [ 0.66, 0.0, 0.0],   # soft right
+#     [ 1.0,  0.0, 0.0],   # right
+#     [ 0.0,  0.33, 0.0],  # soft gas
+#     [ 0.0,  0.66, 0.0],  # gas
+#     [ 0.0,  1.0, 0.0],   # full gas
+#     [ 0.0,  0.0, 0.33],  # soft soft brake
+#     [ 0.0,  0.0, 0.66],  # soft brake
+#     [ 0.0,  0.0, 1.0],   # brake
+#     [-0.33, 0.33, 0.0],   # left + gas
+#     [ 0.33, 0.33, 0.0],   # right + gas
+#     [-0.33, 0.0, 0.33],   # left + brake
+#     [ 0.33, 0.0, 0.33],   # right + brake
+# ], dtype=np.float32)
 
 actions_n = len(actions)
 
@@ -173,7 +175,7 @@ def evaluate_training(eval_env, model, args, target_value = 500):
     print("Evaluation return:", mean_return)
     if mean_return > target_value:
         print("Target reached, stopping training.")
-        return True
+        return True, mean_return
 
     return False, mean_return
 
@@ -461,6 +463,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
     epsilon = args.epsilon
+    beta = args.beta
 
     # Helper for saving/loading agents
     agent = AgentSaver(args, "racing_prior", model_name = "q_model_racing.pt")
@@ -527,7 +530,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             # replay_buffer.append(Transition(state, action, reward, done, next_state))
             replay_buffer.append(Transition(stacked_state, action, reward, done, stacked_next_state))
 
-            if len(replay_buffer) > args.batch_size*10:
+            if len(replay_buffer) > args.batch_size*30:
                 # samples = replay_buffer.sample(args.batch_size, replace=True)
                 samples, indices, probabilities = replay_buffer.sample(args.batch_size)
 
@@ -552,13 +555,14 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 # Create training targets
                 q_values[np.arange(args.batch_size), samples.action] = targets
 
-                weights = ((1/len(replay_buffer)) / probabilities )**args.beta
+                weights = ((1/len(replay_buffer)) / probabilities )**beta
                 weights = weights / weights.max()
 
                 network.train_step(samples.state, q_values, weights)
 
                 # Update priorities
-                new_priorities = np.abs(td_errors) + 1e-6
+                alpha = 0.5
+                new_priorities = (np.abs(td_errors) + 1e-6)**alpha
                 for idx, priority in zip(indices, new_priorities):
                     replay_buffer.update_priority(int(idx), float(priority))
                 
@@ -576,8 +580,9 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # Evaluate regularly and stop once the target is reached.
         if episode % 50 == 0:
             target_reached, mean_return = evaluate_training(eval_env, network, args, target_value = 900)
-            if ((mean_return > 750 and best_return < mean_return) or target_reached):
+            if ((mean_return > 750 and best_return <= mean_return) or target_reached):
                 agent.save_next_agent(network)
+                best_return = mean_return
                 print(f"Mean return = {mean_return}")
             if (target_reached or args.max_episodes < episode): 
                 break # Finish training if target reached or max allowed number of episodes exceeded
@@ -585,6 +590,9 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
         if args.epsilon_final_at:
             epsilon = np.interp(episode + 1, [0, args.epsilon_final_at], [args.epsilon, args.epsilon_final])
+        
+        if args.beta_final_at:
+            beta = np.interp(episode + 1, [0, args.beta_final_at], [args.beta, args.beta_final])
 
     # Save model
     agent.save_next_agent(network)
