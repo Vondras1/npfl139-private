@@ -100,7 +100,7 @@ def generate_expert_episode(env: npfl139.EvaluationEnv) -> list[tuple[np.ndarray
         # R[t+1] = reward observed after action A[t]
         S = []
         A = []
-        R = [0] # FIXME
+        R = [0]
 
         for s, a, r in episode:
             S.append(s)
