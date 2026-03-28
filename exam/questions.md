@@ -134,3 +134,37 @@
 - Assume we can get samples with a distribution $P$. Write down the
   loss to minimize if we want to estimate the median of the distribution and
   prove it. [5]
+
+#### Questions@:, Lecture 6 Questions
+- Formulate the policy gradient theorem. [5]
+
+- Prove the part of the policy gradient theorem showing the value
+  of $\nabla_{\boldsymbol\theta} v_\pi(s)$. [10]
+
+- Assuming the policy gradient theorem, formulate the loss used by the REINFORCE
+  algorithm and show how can its gradient be expressed as an expectation
+  over states and actions. [5]
+
+- Write down the REINFORCE algorithm. [10]
+
+- Show that introducing baseline does not influence validity of the policy
+  gradient theorem. [5]
+
+- Write down the REINFORCE with baseline algorithm. [10]
+
+- Write down the trajectory formulation of the operator version of REINFORCE,
+  and show that the usual REINFORCE performs one gradient step to minimize the
+  same utility function. [10]
+
+- Write down the one-step Actor-critic algorithm. [10]
+
+- How and why is entropy regularization used in policy gradient algorithms?
+  What are the differences to $\epsilon$-smooth policies? [5]
+
+- The Asynchronous advantage actor-critic (A3C) policy may utilize recurrent
+  neural networks. How is the training structured to allow backpropagation
+  through them (would vanilla DQN, vanilla REINFORCE, vanilla actor-critic work
+  with recurrent neural networks)? [5]
+
+- Explain the difference between a regular Actor-critic and Parallel Advantage
+  Actor Critic algorithms. [5]
