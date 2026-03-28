@@ -1,0 +1,310 @@
+=== FINAL RESULTS ===
+ 307.75 | lr=0.005  | batch=6
+ 261.68 | lr=0.005  | batch=8
+ 192.42 | lr=0.005  | batch=10
+ 228.24 | lr=0.005  | batch=12
+ 160.08 | lr=0.005  | batch=16
+ 223.41 | lr=0.005  | batch=32
+ 343.48 | lr=0.01   | batch=6
+ 400.42 | lr=0.01   | batch=8
+ 299.53 | lr=0.01   | batch=10
+ 286.87 | lr=0.01   | batch=12
+ 244.39 | lr=0.01   | batch=16
+ 192.70 | lr=0.01   | batch=32
+ 423.94 | lr=0.03   | batch=6
+ 380.09 | lr=0.03   | batch=8
+ 442.16 | lr=0.03   | batch=10
+ 453.92 | lr=0.03   | batch=12
+ 369.83 | lr=0.03   | batch=16
+ 282.37 | lr=0.03   | batch=32
+ 360.49 | lr=0.04   | batch=6
+ 455.03 | lr=0.04   | batch=8
+ 371.43 | lr=0.04   | batch=10
+ 273.48 | lr=0.04   | batch=12
+ 394.73 | lr=0.04   | batch=16
+ 315.33 | lr=0.04   | batch=32
+ 379.05 | lr=0.05   | batch=6
+ 330.87 | lr=0.05   | batch=8
+ 424.75 | lr=0.05   | batch=10
+ 350.45 | lr=0.05   | batch=12
+ 441.88 | lr=0.05   | batch=16
+ 348.39 | lr=0.05   | batch=32
+ 500.00 | lr=0.06   | batch=6
+ 159.67 | lr=0.06   | batch=8
+ 278.86 | lr=0.06   | batch=10
+ 373.72 | lr=0.06   | batch=12
+ 368.43 | lr=0.06   | batch=16
+ 294.51 | lr=0.06   | batch=32
+ 194.83 | lr=0.08   | batch=6
+ 212.35 | lr=0.08   | batch=8
+ 376.61 | lr=0.08   | batch=10
+ 347.42 | lr=0.08   | batch=12
+ 241.09 | lr=0.08   | batch=16
+ 238.45 | lr=0.08   | batch=32
+
+
+=== FINAL RESULTS ===
+ 283.15 | lr=0.005 | decay=0 | batch=6
+ 132.75 | lr=0.005 | decay=1 | batch=6
+ 212.25 | lr=0.005 | decay=0 | batch=7
+ 158.52 | lr=0.005 | decay=1 | batch=7
+ 211.05 | lr=0.005 | decay=0 | batch=8
+ 145.08 | lr=0.005 | decay=1 | batch=8
+ 197.22 | lr=0.005 | decay=0 | batch=9
+ 172.78 | lr=0.005 | decay=1 | batch=9
+ 166.56 | lr=0.005 | decay=0 | batch=10
+ 155.62 | lr=0.005 | decay=1 | batch=10
+ 182.48 | lr=0.005 | decay=0 | batch=11
+ 150.34 | lr=0.005 | decay=1 | batch=11
+ 192.73 | lr=0.005 | decay=0 | batch=12
+ 150.89 | lr=0.005 | decay=1 | batch=12
+ 182.48 | lr=0.005 | decay=0 | batch=14
+ 144.66 | lr=0.005 | decay=1 | batch=14
+ 133.75 | lr=0.005 | decay=0 | batch=16
+ 143.87 | lr=0.005 | decay=1 | batch=16
+ 160.35 | lr=0.005 | decay=0 | batch=32
+ 119.24 | lr=0.005 | decay=1 | batch=32
+ 122.04 | lr=0.005 | decay=0 | batch=64
+  52.21 | lr=0.005 | decay=1 | batch=64
+ 319.31 | lr=0.007 | decay=0 | batch=6
+ 187.90 | lr=0.007 | decay=1 | batch=6
+ 335.82 | lr=0.007 | decay=0 | batch=7
+ 153.85 | lr=0.007 | decay=1 | batch=7
+ 235.95 | lr=0.007 | decay=0 | batch=8
+ 160.80 | lr=0.007 | decay=1 | batch=8
+ 225.51 | lr=0.007 | decay=0 | batch=9
+ 161.90 | lr=0.007 | decay=1 | batch=9
+ 245.78 | lr=0.007 | decay=0 | batch=10
+ 148.63 | lr=0.007 | decay=1 | batch=10
+ 196.60 | lr=0.007 | decay=0 | batch=11
+ 180.91 | lr=0.007 | decay=1 | batch=11
+ 177.76 | lr=0.007 | decay=0 | batch=12
+ 154.54 | lr=0.007 | decay=1 | batch=12
+ 211.45 | lr=0.007 | decay=0 | batch=14
+ 143.83 | lr=0.007 | decay=1 | batch=14
+ 182.31 | lr=0.007 | decay=0 | batch=16
+ 161.12 | lr=0.007 | decay=1 | batch=16
+ 147.55 | lr=0.007 | decay=0 | batch=32
+ 133.94 | lr=0.007 | decay=1 | batch=32
+ 145.96 | lr=0.007 | decay=0 | batch=64
+ 100.63 | lr=0.007 | decay=1 | batch=64
+ 410.26 | lr=0.009 | decay=0 | batch=6
+ 198.30 | lr=0.009 | decay=1 | batch=6
+ 366.77 | lr=0.009 | decay=0 | batch=7
+ 187.77 | lr=0.009 | decay=1 | batch=7
+ 320.76 | lr=0.009 | decay=0 | batch=8
+ 185.15 | lr=0.009 | decay=1 | batch=8
+ 301.21 | lr=0.009 | decay=0 | batch=9
+ 171.66 | lr=0.009 | decay=1 | batch=9
+ 280.19 | lr=0.009 | decay=0 | batch=10
+ 171.32 | lr=0.009 | decay=1 | batch=10
+ 253.97 | lr=0.009 | decay=0 | batch=11
+ 170.12 | lr=0.009 | decay=1 | batch=11
+ 243.75 | lr=0.009 | decay=0 | batch=12
+ 151.16 | lr=0.009 | decay=1 | batch=12
+ 203.57 | lr=0.009 | decay=0 | batch=14
+ 133.46 | lr=0.009 | decay=1 | batch=14
+ 219.58 | lr=0.009 | decay=0 | batch=16
+ 146.75 | lr=0.009 | decay=1 | batch=16
+ 150.55 | lr=0.009 | decay=0 | batch=32
+ 156.32 | lr=0.009 | decay=1 | batch=32
+ 155.50 | lr=0.009 | decay=0 | batch=64
+ 120.39 | lr=0.009 | decay=1 | batch=64
+ 354.17 | lr=0.01 | decay=0 | batch=6
+ 204.63 | lr=0.01 | decay=1 | batch=6
+ 360.75 | lr=0.01 | decay=0 | batch=7
+ 185.50 | lr=0.01 | decay=1 | batch=7
+ 343.78 | lr=0.01 | decay=0 | batch=8
+ 180.64 | lr=0.01 | decay=1 | batch=8
+ 360.68 | lr=0.01 | decay=0 | batch=9
+ 155.96 | lr=0.01 | decay=1 | batch=9
+ 314.23 | lr=0.01 | decay=0 | batch=10
+ 168.49 | lr=0.01 | decay=1 | batch=10
+ 283.65 | lr=0.01 | decay=0 | batch=11
+ 174.94 | lr=0.01 | decay=1 | batch=11
+ 251.52 | lr=0.01 | decay=0 | batch=12
+ 167.81 | lr=0.01 | decay=1 | batch=12
+ 191.19 | lr=0.01 | decay=0 | batch=14
+ 163.91 | lr=0.01 | decay=1 | batch=14
+ 210.38 | lr=0.01 | decay=0 | batch=16
+ 144.33 | lr=0.01 | decay=1 | batch=16
+ 163.39 | lr=0.01 | decay=0 | batch=32
+ 151.45 | lr=0.01 | decay=1 | batch=32
+ 153.69 | lr=0.01 | decay=0 | batch=64
+ 126.20 | lr=0.01 | decay=1 | batch=64
+ 481.61 | lr=0.02 | decay=0 | batch=6
+ 330.89 | lr=0.02 | decay=1 | batch=6
+ 453.56 | lr=0.02 | decay=0 | batch=7
+ 293.06 | lr=0.02 | decay=1 | batch=7
+ 439.91 | lr=0.02 | decay=0 | batch=8
+ 334.54 | lr=0.02 | decay=1 | batch=8
+ 451.19 | lr=0.02 | decay=0 | batch=9
+ 239.03 | lr=0.02 | decay=1 | batch=9
+ 411.36 | lr=0.02 | decay=0 | batch=10
+ 270.59 | lr=0.02 | decay=1 | batch=10
+ 468.36 | lr=0.02 | decay=0 | batch=11
+ 220.99 | lr=0.02 | decay=1 | batch=11
+ 394.75 | lr=0.02 | decay=0 | batch=12
+ 202.52 | lr=0.02 | decay=1 | batch=12
+ 397.08 | lr=0.02 | decay=0 | batch=14
+ 217.54 | lr=0.02 | decay=1 | batch=14
+ 372.22 | lr=0.02 | decay=0 | batch=16
+ 172.60 | lr=0.02 | decay=1 | batch=16
+ 195.71 | lr=0.02 | decay=0 | batch=32
+ 144.71 | lr=0.02 | decay=1 | batch=32
+ 137.54 | lr=0.02 | decay=0 | batch=64
+ 115.00 | lr=0.02 | decay=1 | batch=64
+ 423.79 | lr=0.03 | decay=0 | batch=6
+ 369.10 | lr=0.03 | decay=1 | batch=6
+ 387.56 | lr=0.03 | decay=0 | batch=7
+ 350.74 | lr=0.03 | decay=1 | batch=7
+ 419.67 | lr=0.03 | decay=0 | batch=8
+ 417.47 | lr=0.03 | decay=1 | batch=8
+ 420.47 | lr=0.03 | decay=0 | batch=9
+ 363.74 | lr=0.03 | decay=1 | batch=9
+ 471.08 | lr=0.03 | decay=0 | batch=10
+ 363.00 | lr=0.03 | decay=1 | batch=10
+ 421.51 | lr=0.03 | decay=0 | batch=11
+ 328.21 | lr=0.03 | decay=1 | batch=11
+ 437.74 | lr=0.03 | decay=0 | batch=12
+ 308.89 | lr=0.03 | decay=1 | batch=12
+ 421.37 | lr=0.03 | decay=0 | batch=14
+ 267.74 | lr=0.03 | decay=1 | batch=14
+ 428.22 | lr=0.03 | decay=0 | batch=16
+ 223.79 | lr=0.03 | decay=1 | batch=16
+ 242.15 | lr=0.03 | decay=0 | batch=32
+ 159.85 | lr=0.03 | decay=1 | batch=32
+ 167.43 | lr=0.03 | decay=0 | batch=64
+ 104.97 | lr=0.03 | decay=1 | batch=64
+ 371.70 | lr=0.04 | decay=0 | batch=6
+ 364.65 | lr=0.04 | decay=1 | batch=6
+ 376.73 | lr=0.04 | decay=0 | batch=7
+ 365.49 | lr=0.04 | decay=1 | batch=7
+ 460.11 | lr=0.04 | decay=0 | batch=8
+ 383.30 | lr=0.04 | decay=1 | batch=8
+ 315.33 | lr=0.04 | decay=0 | batch=9
+ 350.57 | lr=0.04 | decay=1 | batch=9
+ 360.91 | lr=0.04 | decay=0 | batch=10
+ 365.42 | lr=0.04 | decay=1 | batch=10
+ 436.41 | lr=0.04 | decay=0 | batch=11
+ 343.91 | lr=0.04 | decay=1 | batch=11
+ 341.28 | lr=0.04 | decay=0 | batch=12
+ 320.97 | lr=0.04 | decay=1 | batch=12
+ 382.92 | lr=0.04 | decay=0 | batch=14
+ 268.89 | lr=0.04 | decay=1 | batch=14
+ 392.65 | lr=0.04 | decay=0 | batch=16
+ 274.71 | lr=0.04 | decay=1 | batch=16
+ 292.98 | lr=0.04 | decay=0 | batch=32
+ 190.22 | lr=0.04 | decay=1 | batch=32
+ 167.37 | lr=0.04 | decay=0 | batch=64
+ 142.49 | lr=0.04 | decay=1 | batch=64
+ 327.17 | lr=0.05 | decay=0 | batch=6
+ 351.42 | lr=0.05 | decay=1 | batch=6
+ 269.87 | lr=0.05 | decay=0 | batch=7
+ 313.96 | lr=0.05 | decay=1 | batch=7
+ 385.03 | lr=0.05 | decay=0 | batch=8
+ 424.06 | lr=0.05 | decay=1 | batch=8
+ 285.39 | lr=0.05 | decay=0 | batch=9
+ 393.42 | lr=0.05 | decay=1 | batch=9
+ 345.02 | lr=0.05 | decay=0 | batch=10
+ 407.76 | lr=0.05 | decay=1 | batch=10
+ 353.54 | lr=0.05 | decay=0 | batch=11
+ 407.83 | lr=0.05 | decay=1 | batch=11
+ 372.48 | lr=0.05 | decay=0 | batch=12
+ 370.35 | lr=0.05 | decay=1 | batch=12
+ 315.22 | lr=0.05 | decay=0 | batch=14
+ 309.07 | lr=0.05 | decay=1 | batch=14
+ 410.50 | lr=0.05 | decay=0 | batch=16
+ 313.62 | lr=0.05 | decay=1 | batch=16
+ 275.03 | lr=0.05 | decay=0 | batch=32
+ 189.70 | lr=0.05 | decay=1 | batch=32
+ 171.54 | lr=0.05 | decay=0 | batch=64
+ 140.65 | lr=0.05 | decay=1 | batch=64
+ 439.29 | lr=0.06 | decay=0 | batch=6
+ 348.55 | lr=0.06 | decay=1 | batch=6
+ 350.09 | lr=0.06 | decay=0 | batch=7
+ 365.06 | lr=0.06 | decay=1 | batch=7
+ 311.74 | lr=0.06 | decay=0 | batch=8
+ 364.17 | lr=0.06 | decay=1 | batch=8
+ 297.34 | lr=0.06 | decay=0 | batch=9
+ 323.17 | lr=0.06 | decay=1 | batch=9
+ 289.54 | lr=0.06 | decay=0 | batch=10
+ 361.18 | lr=0.06 | decay=1 | batch=10
+ 457.97 | lr=0.06 | decay=0 | batch=11
+ 394.12 | lr=0.06 | decay=1 | batch=11
+ 361.96 | lr=0.06 | decay=0 | batch=12
+ 372.13 | lr=0.06 | decay=1 | batch=12
+ 406.64 | lr=0.06 | decay=0 | batch=14
+ 325.17 | lr=0.06 | decay=1 | batch=14
+ 362.03 | lr=0.06 | decay=0 | batch=16
+ 312.90 | lr=0.06 | decay=1 | batch=16
+ 250.08 | lr=0.06 | decay=0 | batch=32
+ 172.84 | lr=0.06 | decay=1 | batch=32
+ 177.34 | lr=0.06 | decay=0 | batch=64
+ 151.82 | lr=0.06 | decay=1 | batch=64
+ 338.26 | lr=0.07 | decay=0 | batch=6
+ 293.49 | lr=0.07 | decay=1 | batch=6
+ 320.59 | lr=0.07 | decay=0 | batch=7
+ 379.38 | lr=0.07 | decay=1 | batch=7
+ 199.42 | lr=0.07 | decay=0 | batch=8
+ 374.79 | lr=0.07 | decay=1 | batch=8
+ 356.07 | lr=0.07 | decay=0 | batch=9
+ 342.07 | lr=0.07 | decay=1 | batch=9
+ 367.34 | lr=0.07 | decay=0 | batch=10
+ 382.73 | lr=0.07 | decay=1 | batch=10
+ 407.49 | lr=0.07 | decay=0 | batch=11
+ 395.26 | lr=0.07 | decay=1 | batch=11
+ 360.84 | lr=0.07 | decay=0 | batch=12
+ 362.00 | lr=0.07 | decay=1 | batch=12
+ 373.70 | lr=0.07 | decay=0 | batch=14
+ 343.34 | lr=0.07 | decay=1 | batch=14
+ 408.25 | lr=0.07 | decay=0 | batch=16
+ 394.09 | lr=0.07 | decay=1 | batch=16
+ 276.47 | lr=0.07 | decay=0 | batch=32
+ 208.63 | lr=0.07 | decay=1 | batch=32
+ 198.40 | lr=0.07 | decay=0 | batch=64
+ 175.09 | lr=0.07 | decay=1 | batch=64
+ 195.86 | lr=0.08 | decay=0 | batch=6
+ 252.35 | lr=0.08 | decay=1 | batch=6
+ 299.38 | lr=0.08 | decay=0 | batch=7
+ 395.77 | lr=0.08 | decay=1 | batch=7
+ 249.69 | lr=0.08 | decay=0 | batch=8
+ 324.54 | lr=0.08 | decay=1 | batch=8
+ 324.26 | lr=0.08 | decay=0 | batch=9
+ 320.48 | lr=0.08 | decay=1 | batch=9
+ 379.79 | lr=0.08 | decay=0 | batch=10
+ 309.55 | lr=0.08 | decay=1 | batch=10
+ 307.42 | lr=0.08 | decay=0 | batch=11
+ 366.60 | lr=0.08 | decay=1 | batch=11
+ 307.38 | lr=0.08 | decay=0 | batch=12
+ 341.40 | lr=0.08 | decay=1 | batch=12
+ 438.60 | lr=0.08 | decay=0 | batch=14
+ 406.29 | lr=0.08 | decay=1 | batch=14
+ 296.30 | lr=0.08 | decay=0 | batch=16
+ 340.80 | lr=0.08 | decay=1 | batch=16
+ 265.08 | lr=0.08 | decay=0 | batch=32
+ 231.88 | lr=0.08 | decay=1 | batch=32
+ 161.38 | lr=0.08 | decay=0 | batch=64
+ 158.72 | lr=0.08 | decay=1 | batch=64
+ 118.61 | lr=0.1 | decay=0 | batch=6
+ 343.66 | lr=0.1 | decay=1 | batch=6
+  90.11 | lr=0.1 | decay=0 | batch=7
+ 313.85 | lr=0.1 | decay=1 | batch=7
+ 260.79 | lr=0.1 | decay=0 | batch=8
+ 385.28 | lr=0.1 | decay=1 | batch=8
+ 270.20 | lr=0.1 | decay=0 | batch=9
+ 204.59 | lr=0.1 | decay=1 | batch=9
+ 264.48 | lr=0.1 | decay=0 | batch=10
+ 295.39 | lr=0.1 | decay=1 | batch=10
+ 278.21 | lr=0.1 | decay=0 | batch=11
+ 376.79 | lr=0.1 | decay=1 | batch=11
+ 287.18 | lr=0.1 | decay=0 | batch=12
+ 303.53 | lr=0.1 | decay=1 | batch=12
+ 235.23 | lr=0.1 | decay=0 | batch=14
+ 292.86 | lr=0.1 | decay=1 | batch=14
+ 320.82 | lr=0.1 | decay=0 | batch=16
+ 247.50 | lr=0.1 | decay=1 | batch=16
+ 285.95 | lr=0.1 | decay=0 | batch=32
+ 227.62 | lr=0.1 | decay=1 | batch=32
+ 108.31 | lr=0.1 | decay=0 | batch=64
+ 146.22 | lr=0.1 | decay=1 | batch=64

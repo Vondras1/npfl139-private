@@ -4,7 +4,7 @@
 # e0cfa255-0259-11eb-9574-ea7484399335
 # 9fafb47f-e1c5-4d7c-8ce5-8a6f5bdcd751
 import argparse
-
+import copy
 import gymnasium as gym
 import numpy as np
 import torch
@@ -20,11 +20,11 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
-parser.add_argument("--episodes", default=400, type=int, help="Training episodes.")
+parser.add_argument("--episodes", default=200, type=int, help="Training episodes.")
 parser.add_argument("--gamma", default=1, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size_policy", default=64, type=int, help="Size of hidden layer.")
 parser.add_argument("--hidden_layer_size_value", default=64, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=0.03, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.04, type=float, help="Learning rate.")
 parser.add_argument("--p_scheduler", default=0, type=float, help="Policy scheduler.")
 parser.add_argument("--v_scheduler", default=0, type=float, help="Value scheduler.")
 
@@ -72,16 +72,29 @@ class Agent:
         self._value_loss = torch.nn.MSELoss()
 
         if self.args.p_scheduler:
-            self._policy_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                                    self._policy_optimizer,
-                                    T_max=self.args.episodes // self.args.batch_size,
-                                    eta_min=0.005)
+            # self._policy_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            #                         self._policy_optimizer,
+            #                         T_max=self.args.episodes // self.args.batch_size,
+            #                         eta_min=0.008)
+            self._policy_scheduler = torch.optim.lr_scheduler.LinearLR(
+                self._policy_optimizer,
+                start_factor=1.0,
+                end_factor=0.1,
+                total_iters=self.args.episodes // self.args.batch_size
+            )
             
         if self.args.v_scheduler:
-            self._value_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                                    self._value_optimizer,
-                                    T_max=self.args.episodes // self.args.batch_size,
-                                    eta_min=0.005)
+            # self._value_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            #                         self._value_optimizer,
+            #                         T_max=self.args.episodes // self.args.batch_size,
+            #                         eta_min=0.008)
+            self._value_scheduler = torch.optim.lr_scheduler.LinearLR(
+                self._policy_optimizer,
+                start_factor=1.0,
+                end_factor=0.1,
+                total_iters=self.args.episodes // self.args.batch_size
+            )
+            
 
     # The `npfl139.typed_torch_function` automatically converts input arguments
     # to PyTorch tensors of given type, and converts the result to a NumPy array.
@@ -214,7 +227,40 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
 
-    # Create the environment
-    main_env = npfl139.EvaluationEnv(gym.make("CartPole-v1"), main_args.seed, main_args.render_each)
+    learning_rates = [0.005, 0.007, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1]
+    batch_sizes = [6, 7, 8, 9, 10, 11, 12, 14, 16, 32, 64]
+    lr_decay = [0, 1]
 
-    mean_return = main(main_env, main_args)
+    results = []
+
+    for lr in learning_rates:
+        for batch_size in batch_sizes:
+            for decay in lr_decay:
+                means = []
+
+                for seed in [1, 2, 3, 4, 5, 40, 50, 60, 70, 80]:
+                    args_copy = copy.deepcopy(main_args)  # avoid side effects
+                    args_copy.learning_rate = lr
+                    args_copy.batch_size = batch_size
+                    args_copy.seed = seed
+                    args_copy.p_scheduler = decay
+                    args_copy.v_scheduler = decay
+
+                    env = npfl139.EvaluationEnv(
+                        gym.make("CartPole-v1"),
+                        seed=seed,
+                        render_each=0
+                    )
+
+                    mean = main(env, args_copy)
+                    means.append(mean)
+
+                mean = np.mean(means)
+
+                results.append((lr, batch_size, decay, mean))
+
+                print(f"lr={lr}, batch={batch_size}, decay={decay} -> {mean:.2f}")
+    
+    print("\n=== FINAL RESULTS ===")
+    for lr, batch, decay, mean in results:
+        print(f"{mean:7.2f} | lr={lr:<3} | decay={decay} | batch={batch}")
