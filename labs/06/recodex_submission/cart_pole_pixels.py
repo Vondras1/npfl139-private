@@ -194,10 +194,9 @@ def load_last_return(txt_path: str) -> float:
 
 def load_ensemble_agents(env, args):
     # model paths
-    lst = os.listdir("./cart_pole_models")
     model_paths = []
-    for model in lst:
-        model_paths.append(f"./cart_pole_models/{model}/best_model.pt")
+    for i in range(1, 6):
+        model_paths.append(f"./model{i}.pt")
 
     agents = []
     for path in model_paths:
