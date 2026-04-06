@@ -15,15 +15,15 @@ parser.add_argument("--env", default="LunarLander-v3", type=str, help="Environme
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
-parser.add_argument("--threads", default=10, type=int, help="Maximum number of threads to use.")
+parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--entropy_regularization", default=0.01, type=float, help="Entropy regularization weight.")
-parser.add_argument("--envs", default=16, type=int, help="Number of parallel environments.")
+parser.add_argument("--envs", default=32, type=int, help="Number of parallel environments.")
 parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of batches.")
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=0.01, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.0224, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="paac_actor.pt", type=str, help="Path to the actor model.")
 
 
@@ -151,7 +151,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         while not done:
             # TODO: Predict an action using the greedy policy.
             predicted_probs = agent.predict_actions(state)
-            action = int(np.argmax(predicted_probs))
+            action = np.argmax(predicted_probs)
             state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
             rewards += reward
@@ -169,14 +169,14 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     states = vector_env.reset(seed=args.seed)[0]
 
     training = True
+    best_return = 0
+    target_return = 260
     while training:
         # Training
         for _ in range(args.evaluate_each):
             # TODO: Choose actions using `agent.predict_actions`.
-            action_probs = agent.predict_actions(states)          # shape [envs, 4]
-            actions = np.array([
-                np.random.choice(len(probs), p=probs) for probs in action_probs
-            ], dtype=np.int64)
+            action_probs = agent.predict_actions(states)
+            actions = np.array([np.random.choice(len(probs), p=probs) for probs in action_probs], dtype=np.int64)
 
             # Perform steps in the vectorized environment
             next_states, rewards, terminated, truncated, _ = vector_env.step(actions)
@@ -192,11 +192,20 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             states = next_states
 
         # Periodic evaluation
-        print("-----------")
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
+        avg_return = np.mean(returns)
         print(f"Mean return {np.mean(returns)}")
+        print("-----------")
 
-        if np.mean(returns) >= 240: training = False
+
+        if avg_return > best_return:
+            longer_returns = [evaluate_episode() for _ in range(5*args.evaluate_for)]
+            avg_long_return = np.mean(longer_returns)
+            if avg_long_return > best_return:
+                agent.save_actor(args.model_path)
+                agent.save_args(args.model_path + ".json", args)
+                print("returns_best:", best_return, "\t actor->saved") 
+
 
     # Save the agent
     agent.save_actor(args.model_path)
