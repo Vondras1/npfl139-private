@@ -1,0 +1,7 @@
+episode: 10, mean_return: 26.4867
+episode: 30, mean_return: 35.9000
+episode: 40, mean_return: 75.7333
+episode: 50, mean_return: 172.6667
+episode: 60, mean_return: 399.0000
+episode: 70, mean_return: 500.0000
+episode: 100, mean_return: 500.0000

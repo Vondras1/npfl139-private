@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import time
 
 import gymnasium as gym
 import numpy as np
@@ -21,22 +22,44 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 
 parser.add_argument("--policy_hidden_layer_size", default=64, type=int, help="Size of policy hidden layer.")
 parser.add_argument("--value_hidden_layer_size", default=64, type=int, help="Size of value hidden layer.")
-parser.add_argument("--learning_rate", default=0.0001, type=float)
+parser.add_argument("--learning_rate", default=5e-3, type=float)
 parser.add_argument("--entropy_coef", default=0.01, type=float)
-parser.add_argument("--batch_size", default=16, type=int, help="Batch size.")
-parser.add_argument("--episodes", default=200, type=int, help="Training episodes.")
-parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
+parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
+parser.add_argument("--episodes", default=1000, type=int, help="Training episodes.")
+parser.add_argument("--gamma", default=0.9, type=float, help="Discounting factor.")
 
 parser.add_argument("--evaluation_each", default=10, type=int, help="Evaluate every N training iterations.")
 parser.add_argument("--evaluation_episodes_short", default=20, type=int, help="Number of evaluation episodes.")
-parser.add_argument("--evaluation_episodes_long", default=200, type=int, help="Number of evaluation episodes.")
+parser.add_argument("--evaluation_episodes_long", default=150, type=int, help="Number of evaluation episodes.")
 parser.add_argument("--target_return", default=500, type=float, help="Target mean return.")
 parser.add_argument("--model_path", default="best_model.pt", type=str, help="Path to saved model.")
 parser.add_argument("--load_model", default=False, action="store_true", help="Load pretrained model if it exists.")
+parser.add_argument("--frame_buffer_size", default=4, type=int,
+                    help="Number of frames to stack for state representation.")
 
-WHITE = np.array((255, 255, 255))
-GRAY = (128, 128, 128)
-BLACK = (0, 0, 0)
+
+WHITE = np.array(255)
+GRAY = np.array(128)
+BLACK = np.array(0)
+
+
+class Framebuffer:
+
+    def __init__(self, size: int):
+        self.size = size
+        self.buffer = None
+
+    def push_frame(self, angle: float, base_pixel: int):
+        frame = np.array([angle, base_pixel], dtype=np.float32)
+        if self.buffer is None:
+            self.buffer = np.array([angle, base_pixel] * self.size, dtype=np.float32)
+        else:
+            self.buffer = np.roll(self.buffer, -2)  # Shift left by 2 (angle and base_pixel)
+            self.buffer[-2:] = frame  # Insert new frame at the end
+
+    def get_frame(self) -> np.ndarray:
+        return self.buffer
+
 
 def __get_highest_pole_point(image: np.ndarray) -> Tuple[int, int]:
     for y in range(image.shape[0]):
@@ -46,7 +69,7 @@ def __get_highest_pole_point(image: np.ndarray) -> Tuple[int, int]:
     raise ValueError("Pole not found in the image.")
 
 
-def __get_base_pixel(image: np.ndarray) -> int:
+def __get_base_pixel(image: np.ndarray) -> Tuple[int, int]:
     BASE_Y = 55
     for x in range(image.shape[1]):
         if np.array_equal(image[BASE_Y, x], WHITE):
@@ -55,11 +78,11 @@ def __get_base_pixel(image: np.ndarray) -> int:
     raise ValueError("Pole not found in the image.")
 
 
-def __get_left_base_pixel(image: np.ndarray) -> int:
+def __get_left_base_pixel(image: np.ndarray) -> float:
     BASE_Y = 62
     for x in range(image.shape[1]):
         if np.array_equal(image[BASE_Y, x], GRAY):
-            return x
+            return x / 63  # Normalize to [0, 1]
     raise ValueError("Base not found in the image.")
 
 
@@ -71,7 +94,7 @@ def _get_angle(image: np.ndarray) -> float:
     dx = pole_point[1] - base_point[1]
 
     angle = np.arctan2(dy, dx)
-    return angle
+    return (angle + (np.pi / 2)) / 0.418 * 2  # Normalize to [-1, 1] (pls trust me bro)
 
 
 class Network(torch.nn.Module):
@@ -84,21 +107,18 @@ class Network(torch.nn.Module):
         self.args = args
 
         actions_n = env.action_space.n
-        H, W, C = env.observation_space.shape  # It should be [64x64x3]
 
-        self.relu = torch.nn.ReLU()
-
-        self.decoder_linear = torch.nn.Linear(2, 128)
+        self.decoder_linear = torch.nn.Linear(2 * args.frame_buffer_size, 32).to(self.device)
 
         # Define two heads. One for policy, second for value function
         self._policy = torch.nn.Sequential(
-            torch.nn.Linear(128, args.policy_hidden_layer_size),
+            torch.nn.Linear(32, args.policy_hidden_layer_size),
             torch.nn.ReLU(),
             torch.nn.Linear(args.policy_hidden_layer_size, actions_n),
         ).to(self.device)
 
         self._value = torch.nn.Sequential(
-            torch.nn.Linear(128, args.value_hidden_layer_size),
+            torch.nn.Linear(32, args.value_hidden_layer_size),
             torch.nn.ReLU(),
             torch.nn.Linear(args.value_hidden_layer_size, 1),
         ).to(self.device)
@@ -120,7 +140,7 @@ class Network(torch.nn.Module):
 
     def forward(self, x: torch.Tensor):
         x = x.float()
-        x = self.relu(self.decoder_linear(x))
+        x = torch.nn.functional.relu(self.decoder_linear(x))
 
         policy = self._policy(x)
         value = self._value(x)
@@ -150,7 +170,7 @@ class Network(torch.nn.Module):
 
         # Total loss
         # print(f"value_loss = {value_loss}, policy_loss = {policy_loss}, entropy = {entropy}")
-        loss = (0.1) * value_loss + policy_loss - 0.01 * entropy
+        loss = value_loss + policy_loss - 0.01 * entropy
 
         self._optimizer.zero_grad()
         loss.backward()
@@ -170,13 +190,15 @@ def evaluate_model(eval_env, model, eval_type, evaluation_episodes, target_value
     for _ in range(evaluation_episodes):
         state, done = eval_env.reset()[0], False
 
+        fb = Framebuffer(size=model.args.frame_buffer_size)
         episode_return = 0
         while not done:
+            state = state[:, :, -1]
             pole_angle = _get_angle(state)
             base_pixel = __get_left_base_pixel(state)
+            fb.push_frame(pole_angle, base_pixel)
             # Choose a greedy action
-            features = np.array([pole_angle, base_pixel], dtype=np.float32)
-            action = np.argmax(model.predict(features[None])[0])
+            action = np.argmax(model.predict(torch.tensor(fb.get_frame())))
             state, reward, terminated, truncated, _ = eval_env.step(action)
             done = terminated or truncated
             episode_return += reward
@@ -185,7 +207,7 @@ def evaluate_model(eval_env, model, eval_type, evaluation_episodes, target_value
 
     mean_return = np.mean(returns)
 
-    if (eval_type == "long"):
+    if eval_type == "long":
         print("Evaluation return:", mean_return)
         if mean_return > target_value:
             print("Target reached, stopping training.")
@@ -213,41 +235,6 @@ def load_last_return(txt_path: str) -> float:
 
     return 0.0
 
-
-def load_ensemble_agents(env, args):
-    # model paths
-    lst = os.listdir("./cart_pole_models")
-    model_paths = []
-    for model in lst:
-        model_paths.append(f"./cart_pole_models/{model}/best_model.pt")
-
-    agents = []
-    for path in model_paths:
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Missing model file: {path}")
-
-        agent = Network(env, args)
-        agent.load_state_dict(torch.load(path, map_location=agent.device))
-        agent.eval()
-        agents.append(agent)
-
-    print(f"Loaded {len(agents)} model(s) for ensemble:")
-    for path in model_paths:
-        print(f"  - {path}")
-
-    return agents
-
-
-def ensemble_predict(agents, state: np.ndarray) -> np.ndarray:
-    probs = []
-    for agent in agents:
-        agent_probs = agent.predict(state)[0]  # shape [actions]
-        probs.append(agent_probs)
-
-    mean_probs = np.mean(probs, axis=0)
-    return mean_probs
-
-
 def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Set the random seed and the number of threads.
     npfl139.startup(args.seed, args.threads)
@@ -267,16 +254,24 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
     if args.recodex:
         # TODO: Load the agent
-        agents = load_ensemble_agents(env, args)
+        agent = Network(env, args)
+        agent.load_state_dict(torch.load(args.model_path, map_location=agent.device))
+        agent.eval()
         # Final evaluation
         while True:
             state, done = env.reset(options={"start_evaluation": True})[0], False
-            pole_angle = _get_angle(state)
-            base_pixel = __get_left_base_pixel(state)
+            fb = Framebuffer(size=args.frame_buffer_size)
+
             while not done:
-                # TODO: Choose a greedy action.
-                ensemble_predicted_probs = ensemble_predict(agents, state)
-                action = int(np.argmax(ensemble_predicted_probs))
+                gray = state[:, :, -1]
+                pole_angle = _get_angle(gray)
+                base_pixel = __get_left_base_pixel(gray)
+                fb.push_frame(pole_angle, base_pixel)
+
+                custom_state = fb.get_frame().copy().astype(np.float32)
+                agent_probs = agent.predict(custom_state)
+                action = int(np.argmax(agent_probs))
+
                 state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
 
@@ -292,24 +287,25 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Perform training
     for episode in range(1, args.episodes + 1):
         batch_states, batch_actions, batch_returns = [], [], []
+        fb = Framebuffer(size=args.frame_buffer_size)
         for _ in range(args.batch_size):
             # Perform episode
             states, actions, rewards = [], [], []
             state, done = env.reset()[0], False
             while not done:
+                state = state[:, :, -1]
                 # Choose `action` according to probabilities
                 # distribution (see `np.random.choice`), which you
                 # can compute using `agent.predict` and current `state`.
                 pole_angle = _get_angle(state)
                 base_pixel = __get_left_base_pixel(state)
-                print(f"Pole angle: {pole_angle:.4f}, Base pixel: {base_pixel}")
+                fb.push_frame(pole_angle, base_pixel)
+                # print(f"Pole angle: {pole_angle:.4f}, Base pixel: {base_pixel}")
+                # time.sleep(0.2)
 
-                # custom_state = torch.Tensor([pole_angle, base_pixel])
-                custom_state = np.array([pole_angle, base_pixel], dtype=np.float32)
+                custom_state = torch.Tensor(fb.get_frame())  # shape [frame_buffer_size*2]
 
-                # policy_probs = agent.predict(custom_state)
-                # action = np.random.choice(len(policy_probs), p=policy_probs)
-                policy_probs = agent.predict(custom_state[None])[0]
+                policy_probs = agent.predict(custom_state)
                 action = np.random.choice(len(policy_probs), p=policy_probs)
 
                 next_state, reward, terminated, truncated, _ = env.step(action)
@@ -340,10 +336,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # Evaluation
         if episode % args.evaluation_each == 0:
             _, short_mean = evaluate_model(eval_env, agent, "short", args.evaluation_episodes_short, args.target_return)
-
-            if short_mean > 450 or episode % 50 == 0:  # episode % 100 == 0 ---> Provide feedback even if you didn't improve your score
+            # print(f"short mean = {short_mean}")
+            if short_mean > (best_return - 25) or episode % 50 == 0:  # episode % 100 == 0 ---> Provide feedback even if you didn't improve your score
                 target_reached, long_mean = evaluate_model(eval_env, agent, "long", args.evaluation_episodes_long, args.target_return)
-                if long_mean > best_return-15:
+                if long_mean >= best_return:
                     best_return = long_mean
                     torch.save(agent.state_dict(), args.model_path)
 
