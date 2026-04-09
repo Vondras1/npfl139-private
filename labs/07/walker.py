@@ -3,6 +3,7 @@ import argparse
 import collections
 import copy
 import json
+import os
 
 import gymnasium as gym
 import numpy as np
@@ -21,7 +22,7 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for", default=50, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
@@ -170,30 +171,10 @@ class Agent:
         # TODO: Define an optimizer. Using `torch.optim.Adam` optimizer with
         # the given `args.learning_rate` is a good default.
 
-        self._actor_optimizer = torch.optim.Adam(
-            [p for n, p in self._actor.named_parameters() if n != "_log_alpha"],
-            lr=args.learning_rate
-        )
-
-        self._critic_optimizer = torch.optim.Adam(
-            list(self._critic1.parameters()) + list(self._critic2.parameters()),
-            lr=args.learning_rate
-        )
-
-        self._alpha_optimizer = torch.optim.Adam(
-            [self._actor._log_alpha],
-            lr=args.learning_rate
-        )
-
         # self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
-        # self._critic_optimizer = torch.optim.Adam(self._critic1.parameters(), lr=args.learning_rate)
+        # self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
         # self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
-
-        # self._actor_optimizer = torch.optim.Adam([p for n, p in self._actor.named_parameters() if n != "_log_alpha"], lr=args.learning_rate)
-
-        # self._alpha_optimizer = torch.optim.Adam([self._actor._log_alpha],lr=args.learning_rate)
-
-        # self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()),lr=args.learning_rate)
+        self._optimizer = torch.optim.Adam(list(self._actor.parameters()) + list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
 
         # Create MSE loss.
         self._mse_loss = torch.nn.MSELoss()
@@ -211,9 +192,9 @@ class Agent:
         q2 = self._critic2(states, new_actions)
 
         actor_loss = (alpha.detach() * log_prob - torch.minimum(q1,q2)).mean()
-        self._actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self._actor_optimizer.step()
+        # self._actor_optimizer.zero_grad()
+        # actor_loss.backward()
+        # self._actor_optimizer.step()
 
         #   - the objective for `alpha`, where `log_prob.detach()` should be used
         #     to avoid computing gradient for other variables than `alpha`.
@@ -221,18 +202,24 @@ class Agent:
         #     component is fine and does not need to be tuned for the agent to train).
         
         alpha_loss = (-alpha * log_prob.detach() - alpha * self._target_entropy).mean()
-        self._alpha_optimizer.zero_grad()
-        alpha_loss.backward()
-        self._alpha_optimizer.step()
+        # self._alpha_optimizer.zero_grad()
+        # alpha_loss.backward()
+        # self._alpha_optimizer.step()
 
         # - the critics using MSE loss.
         q1 = self._critic1(states, actions).squeeze(-1)
         q2 = self._critic2(states, actions).squeeze(-1)
 
         critic_loss = self._mse_loss(q1, returns) + self._mse_loss(q2, returns)
-        self._critic_optimizer.zero_grad()
+        # self._critic_optimizer.zero_grad()
+        # critic_loss.backward()
+        # self._critic_optimizer.step()
+
+        self._optimizer.zero_grad()
+        actor_loss.backward()
+        alpha_loss.backward()
         critic_loss.backward()
-        self._critic_optimizer.step()
+        self._optimizer.step()
 
         #
         # Finally, update the two target critic networks exponential moving
@@ -294,7 +281,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Construct the agent.
     agent = Agent(env, args)
 
-    if False:
+    if True:
         agent.load_actor(args.model_path)
 
     def evaluate_episode(start_evaluation: bool = False, logging: bool = True) -> float:
@@ -325,6 +312,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
     target_return = 250
     best_return = -100
+    log_path = os.path.splitext(args.model_path)[0] + ".txt"
+
     state = vector_env.reset(seed=args.seed)[0]
     training = True
     while training:
@@ -337,6 +326,12 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             done = terminated | truncated
             replay_buffer.append_batch(Transition(state, action, reward, done, next_state))
             state = next_state
+
+            # Remove terminal penalty # TODO
+            reward = np.where(done, 0.0, reward)
+            # print(reward)
+            # if reward >= -100:
+            #     reward == 0
 
             # Training
             if len(replay_buffer) >= 10 * args.batch_size:
@@ -358,12 +353,16 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             print("Actor saved")
             agent.save_actor(args.train_model_path)
             agent.save_args(args.train_model_path + ".json", args)
+            with open(log_path, "a") as f:
+                f.write(f"mean_return: {best_return:.4f}\n")
 
 
     # You can save the agent using:
     print("Actor saved")
     agent.save_actor(args.model_path)
     agent.save_args(args.model_path + ".json", args)
+    with open(log_path, "a") as f:
+        f.write(f"mean_return: {best_return:.4f}\n")
 
     # Final evaluation
     while True:

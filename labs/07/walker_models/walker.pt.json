@@ -6,7 +6,7 @@
   "threads": 1,
   "batch_size": 256,
   "envs": 8,
-  "evaluate_each": 50,
+  "evaluate_each": 1000,
   "evaluate_for": 50,
   "gamma": 0.99,
   "hidden_layer_size": 128,
