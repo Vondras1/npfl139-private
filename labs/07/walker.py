@@ -169,9 +169,25 @@ class Agent:
 
         # TODO: Define an optimizer. Using `torch.optim.Adam` optimizer with
         # the given `args.learning_rate` is a good default.
-        self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
-        self._critic_optimizer = torch.optim.Adam(self._critic1.parameters(), lr=args.learning_rate)
-        self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
+
+        self._actor_optimizer = torch.optim.Adam(
+            [p for n, p in self._actor.named_parameters() if n != "_log_alpha"],
+            lr=args.learning_rate
+        )
+
+        self._critic_optimizer = torch.optim.Adam(
+            list(self._critic1.parameters()) + list(self._critic2.parameters()),
+            lr=args.learning_rate
+        )
+
+        self._alpha_optimizer = torch.optim.Adam(
+            [self._actor._log_alpha],
+            lr=args.learning_rate
+        )
+
+        # self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
+        # self._critic_optimizer = torch.optim.Adam(self._critic1.parameters(), lr=args.learning_rate)
+        # self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
 
         # self._actor_optimizer = torch.optim.Adam([p for n, p in self._actor.named_parameters() if n != "_log_alpha"], lr=args.learning_rate)
 
