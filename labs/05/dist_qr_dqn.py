@@ -18,14 +18,14 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 parser.add_argument("--verify", default=False, action="store_true", help="Verify the loss computation")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
-parser.add_argument("--epsilon", default=0.5, type=float, help="Exploration factor.")
+parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
+parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
 parser.add_argument("--epsilon_final", default=0.1, type=float, help="Final exploration factor.")
-parser.add_argument("--epsilon_final_at", default=800, type=int, help="Training episodes.")
+parser.add_argument("--epsilon_final_at", default=500, type=int, help="Training episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
-parser.add_argument("--kappa", default=1, type=float, help="The quantile Huber loss threshold.")
-parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.")
+parser.add_argument("--kappa", default=100, type=float, help="The quantile Huber loss threshold.")
+parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
 parser.add_argument("--quantiles", default=100, type=int, help="Number of quantiles.")
 parser.add_argument("--target_update_freq", default=..., type=int, help="Target update frequency.")
 
@@ -167,6 +167,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
 
     # Construct the network
     network = Network(env, args)
+    network._model.load_state_dict(torch.load("dist_qr_dqn.pt", map_location=network.device))
+    network._model.eval()
 
     # # Construct the target network
     # target_network = Network(env, args)
@@ -221,7 +223,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
             epsilon = np.interp(env.episode + 1, [0, args.epsilon_final_at], [args.epsilon, args.epsilon_final])
 
         # evaluate and quit training if target reached
-        if env.episode % 200 == 0:
+        if env.episode % 50 == 0:
             returns = []
             for _ in range(100):
                 state, done = eval_env.reset()[0], False
@@ -238,7 +240,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> Callable | Non
 
             mean_return = np.mean(returns)
             print("Evaluation return:", mean_return)
-            if mean_return > 450:
+            if mean_return > 460:
                 torch.save(network._model.state_dict(), "dist_qr_dqn.pt")
                 print("Target reached, stopping training.")
                 break
