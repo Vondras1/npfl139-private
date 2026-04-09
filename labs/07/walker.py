@@ -19,13 +19,13 @@ parser.add_argument("--render_each", default=0, type=int, help="Render some epis
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
 parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for", default=50, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.0003, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="walker_models/walker.pt", type=str, help="Model path")
 parser.add_argument("--train_model_path", default="walker_models/train_walker.pt", type=str, help="Model path")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
@@ -169,15 +169,15 @@ class Agent:
 
         # TODO: Define an optimizer. Using `torch.optim.Adam` optimizer with
         # the given `args.learning_rate` is a good default.
-        # self._actor_optimizer = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
-        # self._critic_optimizer = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
-        # self._alpha_optimizer = torch.optim.Adam(self.parameters(), lr=args.learning_rate)
+        self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
+        self._critic_optimizer = torch.optim.Adam(self._critic1.parameters(), lr=args.learning_rate)
+        self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
 
-        self._actor_optimizer = torch.optim.Adam([p for n, p in self._actor.named_parameters() if n != "_log_alpha"], lr=args.learning_rate)
+        # self._actor_optimizer = torch.optim.Adam([p for n, p in self._actor.named_parameters() if n != "_log_alpha"], lr=args.learning_rate)
 
-        self._alpha_optimizer = torch.optim.Adam([self._actor._log_alpha],lr=args.learning_rate)
+        # self._alpha_optimizer = torch.optim.Adam([self._actor._log_alpha],lr=args.learning_rate)
 
-        self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()),lr=args.learning_rate)
+        # self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()),lr=args.learning_rate)
 
         # Create MSE loss.
         self._mse_loss = torch.nn.MSELoss()
@@ -295,6 +295,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # ReCodEx evaluation.
     if args.recodex:
         agent.load_actor(args.model_path)
+        # agent.load_actor(args.train_model_path)
         while True:
             evaluate_episode(start_evaluation=True)
 
@@ -332,11 +333,12 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        avg_returns = np.mean(returns)
-        print("Average evaluation return = ", avg_returns)
-        if avg_returns >= target_return or target_return is None: 
+        avg_return = np.mean(returns)
+        print("Average evaluation return = ", avg_return)
+        if avg_return >= target_return or target_return is None: 
             break
-        elif avg_returns >= best_return:
+        elif avg_return >= best_return:
+            best_return = avg_return
             print("Actor saved")
             agent.save_actor(args.train_model_path)
             agent.save_args(args.train_model_path + ".json", args)
