@@ -21,12 +21,13 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=200, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for", default=50, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="walker_models/walker.pt", type=str, help="Model path")
+parser.add_argument("--train_model_path", default="walker_models/train_walker.pt", type=str, help="Model path")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
@@ -306,6 +307,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
     target_return = 250
+    best_return = -100
     state = vector_env.reset(seed=args.seed)[0]
     training = True
     while training:
@@ -331,10 +333,17 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
         avg_returns = np.mean(returns)
+        print("Average evaluation return = ", avg_returns)
         if avg_returns >= target_return or target_return is None: 
             break
+        elif avg_returns >= best_return:
+            print("Actor saved")
+            agent.save_actor(args.train_model_path)
+            agent.save_args(args.train_model_path + ".json", args)
+
 
     # You can save the agent using:
+    print("Actor saved")
     agent.save_actor(args.model_path)
     agent.save_args(args.model_path + ".json", args)
 
