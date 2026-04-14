@@ -23,16 +23,17 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
 parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
-parser.add_argument("--evaluate_for", default=50, type=int, help="Evaluate the given number of episodes.")
+parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evaluate the given number of episodes.")
+parser.add_argument("--evaluate_for_longer", default=100, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=0.0003, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="walker_models/walker.pt", type=str, help="Model path")
-parser.add_argument("--train_model_path", default="walker_models/train_walker.pt", type=str, help="Model path")
+parser.add_argument("--model_path", default="walker_models/walker", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="walker_models/walker_193", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
-
+parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 class Agent:
     # Use GPU if available.
@@ -260,6 +261,24 @@ class Agent:
 
     def load_actor(self, path: str) -> None:
         self._actor.load_state_dict(torch.load(path, map_location=self.device))
+    
+    def save_models(self, path: str) -> None:
+        torch.save({
+            "actor": self._actor.state_dict(),
+            "critic1": self._critic1.state_dict(),
+            "critic2": self._critic2.state_dict(),
+            "target_critic1": self._target_critic1.state_dict(),
+            "target_critic2": self._target_critic2.state_dict(),
+        }, path)
+    
+    def load_models(self, path: str) -> None:
+        model_blocks = torch.load(path, map_location=self.device)
+
+        self._actor.load_state_dict(model_blocks["actor"])
+        self._critic1.load_state_dict(model_blocks["critic1"])
+        self._critic2.load_state_dict(model_blocks["critic2"])
+        self._target_critic1.load_state_dict(model_blocks["target_critic1"])
+        self._target_critic2.load_state_dict(model_blocks["target_critic2"])
 
     @staticmethod
     def save_args(path: str, args: argparse.Namespace) -> None:
@@ -281,9 +300,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Construct the agent.
     agent = Agent(env, args)
 
-    if True:
-        agent.load_actor(args.model_path)
-
     def evaluate_episode(start_evaluation: bool = False, logging: bool = True) -> float:
         state = env.reset(options={"start_evaluation": start_evaluation, "logging": logging})[0]
         rewards, done = 0, False
@@ -295,10 +311,11 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             rewards += reward
         return rewards
 
+    if args.load_pretrained_models or args.recodex:
+        agent.load_models(args.load_model_path)
+    
     # ReCodEx evaluation.
     if args.recodex:
-        agent.load_actor(args.model_path)
-        # agent.load_actor(args.train_model_path)
         while True:
             evaluate_episode(start_evaluation=True)
 
@@ -329,9 +346,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
             # Remove terminal penalty # TODO
             reward = np.where(done, 0.0, reward)
-            # print(reward)
-            # if reward >= -100:
-            #     reward == 0
 
             # Training
             if len(replay_buffer) >= 10 * args.batch_size:
@@ -343,26 +357,25 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 agent.train(states, actions, returns)
 
         # Periodic evaluation
-        returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        avg_return = np.mean(returns)
-        print("Average evaluation return = ", avg_return)
-        if avg_return >= target_return or target_return is None: 
-            break
-        elif avg_return >= best_return:
-            best_return = avg_return
-            print("Actor saved")
-            agent.save_actor(args.train_model_path)
-            agent.save_args(args.train_model_path + ".json", args)
-            with open(log_path, "a") as f:
-                f.write(f"mean_return: {best_return:.4f}\n")
+        returns_short = [evaluate_episode() for _ in range(args.evaluate_for_shorter)]
+        avg_return_short = np.mean(returns_short)
+        print("Average short evaluation return is: ", avg_return_short)
 
+        if avg_return_short >= best_return or avg_return_short >= 150:
+            avg_return_long = np.mean([evaluate_episode() for _ in range(args.evaluate_for_longer)])
+            print("Average long evaluation return is: ", avg_return_long)
+            if avg_return_long >= best_return:
+                best_return = avg_return_long
+                agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
+                agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
+            elif(avg_return_long >= 200):
+                agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
+                agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
+            if avg_return_long >= target_return:
+                break
 
-    # You can save the agent using:
-    print("Actor saved")
-    agent.save_actor(args.model_path)
+    agent.save_models(args.model_path)
     agent.save_args(args.model_path + ".json", args)
-    with open(log_path, "a") as f:
-        f.write(f"mean_return: {best_return:.4f}\n")
 
     # Final evaluation
     while True:
