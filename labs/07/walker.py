@@ -22,7 +22,7 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=2000, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=5000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
@@ -175,59 +175,111 @@ class Agent:
         # self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
         # self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
         # self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
-        self._optimizer = torch.optim.Adam(list(self._actor.parameters()) + list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
+        # self._optimizer = torch.optim.Adam(list(self._actor.parameters()) + list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
+
+        self._actor_optimizer = torch.optim.Adam(
+            [p for n, p in self._actor.named_parameters() if n != "_log_alpha"],
+            lr=args.learning_rate
+        )
+
+        self._critic_optimizer = torch.optim.Adam(
+            list(self._critic1.parameters()) + list(self._critic2.parameters()),
+            lr=args.learning_rate
+        )
+
+        self._alpha_optimizer = torch.optim.Adam(
+            [self._actor._log_alpha],
+            lr=args.learning_rate
+        )
 
         # Create MSE loss.
         self._mse_loss = torch.nn.MSELoss()
 
-    # The `npfl139.typed_torch_function` automatically converts input arguments
-    # to PyTorch tensors of given type, and converts the result to a NumPy array.
+
     @npfl139.typed_torch_function(device, torch.float32, torch.float32, torch.float32)
     def train(self, states: torch.Tensor, actions: torch.Tensor, returns: torch.Tensor) -> None:
-        # TODO: Separately train:
-        # - the actor, by using two objectives:
-        #   - the objective for the actor itself; in this objective, `alpha.detach()`
-        #     should be used (for the `alpha` returned by the actor) to avoid optimizing `alpha`,
+        # 1) Actor update
         new_actions, log_prob, alpha = self._actor(states, sample=True)
-        q1 = self._critic1(states, new_actions)
-        q2 = self._critic2(states, new_actions)
+        q1_actor = self._critic1(states, new_actions)
+        q2_actor = self._critic2(states, new_actions)
 
-        actor_loss = (alpha.detach() * log_prob - torch.minimum(q1,q2)).mean()
-        # self._actor_optimizer.zero_grad()
-        # actor_loss.backward()
-        # self._actor_optimizer.step()
+        actor_loss = (alpha.detach() * log_prob - torch.minimum(q1_actor, q2_actor)).mean()
 
-        #   - the objective for `alpha`, where `log_prob.detach()` should be used
-        #     to avoid computing gradient for other variables than `alpha`.
-        #     Use `args.target_entropy` as the target entropy (the default of -1 per action
-        #     component is fine and does not need to be tuned for the agent to train).
-        
-        alpha_loss = (-alpha * log_prob.detach() - alpha * self._target_entropy).mean()
-        # self._alpha_optimizer.zero_grad()
-        # alpha_loss.backward()
-        # self._alpha_optimizer.step()
+        self._actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self._actor_optimizer.step()
 
-        # - the critics using MSE loss.
+        # 2) Alpha update
+        _, log_prob_alpha, alpha = self._actor(states, sample=True)
+        alpha_loss = (-alpha * (log_prob_alpha.detach() + self._target_entropy)).mean()
+
+        self._alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self._alpha_optimizer.step()
+
+        # 3) Critic update
         q1 = self._critic1(states, actions).squeeze(-1)
         q2 = self._critic2(states, actions).squeeze(-1)
 
         critic_loss = self._mse_loss(q1, returns) + self._mse_loss(q2, returns)
-        # self._critic_optimizer.zero_grad()
-        # critic_loss.backward()
-        # self._critic_optimizer.step()
 
-        self._optimizer.zero_grad()
-        actor_loss.backward()
-        alpha_loss.backward()
+        self._critic_optimizer.zero_grad()
         critic_loss.backward()
-        self._optimizer.step()
+        self._critic_optimizer.step()
 
-        #
-        # Finally, update the two target critic networks exponential moving
-        # average with weight `args.target_tau`, using for example the provided
-        #   npfl139.update_params_by_ema(target: torch.nn.Module, source: torch.nn.Module, tau: float)
+        # 4) Target critics EMA update
         npfl139.update_params_by_ema(self._target_critic1, self._critic1, self.args.target_tau)
         npfl139.update_params_by_ema(self._target_critic2, self._critic2, self.args.target_tau)
+
+
+    # # The `npfl139.typed_torch_function` automatically converts input arguments
+    # # to PyTorch tensors of given type, and converts the result to a NumPy array.
+    # @npfl139.typed_torch_function(device, torch.float32, torch.float32, torch.float32)
+    # def train(self, states: torch.Tensor, actions: torch.Tensor, returns: torch.Tensor) -> None:
+    #     # TODO: Separately train:
+    #     # - the actor, by using two objectives:
+    #     #   - the objective for the actor itself; in this objective, `alpha.detach()`
+    #     #     should be used (for the `alpha` returned by the actor) to avoid optimizing `alpha`,
+    #     new_actions, log_prob, alpha = self._actor(states, sample=True)
+    #     q1 = self._critic1(states, new_actions)
+    #     q2 = self._critic2(states, new_actions)
+
+    #     actor_loss = (alpha.detach() * log_prob - torch.minimum(q1,q2)).mean()
+    #     # self._actor_optimizer.zero_grad()
+    #     # actor_loss.backward()
+    #     # self._actor_optimizer.step()
+
+    #     #   - the objective for `alpha`, where `log_prob.detach()` should be used
+    #     #     to avoid computing gradient for other variables than `alpha`.
+    #     #     Use `args.target_entropy` as the target entropy (the default of -1 per action
+    #     #     component is fine and does not need to be tuned for the agent to train).
+        
+    #     alpha_loss = (-alpha * log_prob.detach() - alpha * self._target_entropy).mean()
+    #     # self._alpha_optimizer.zero_grad()
+    #     # alpha_loss.backward()
+    #     # self._alpha_optimizer.step()
+
+    #     # - the critics using MSE loss.
+    #     q1 = self._critic1(states, actions).squeeze(-1)
+    #     q2 = self._critic2(states, actions).squeeze(-1)
+
+    #     critic_loss = self._mse_loss(q1, returns) + self._mse_loss(q2, returns)
+    #     # self._critic_optimizer.zero_grad()
+    #     # critic_loss.backward()
+    #     # self._critic_optimizer.step()
+
+    #     self._optimizer.zero_grad()
+    #     actor_loss.backward()
+    #     alpha_loss.backward()
+    #     critic_loss.backward()
+    #     self._optimizer.step()
+
+    #     #
+    #     # Finally, update the two target critic networks exponential moving
+    #     # average with weight `args.target_tau`, using for example the provided
+    #     #   npfl139.update_params_by_ema(target: torch.nn.Module, source: torch.nn.Module, tau: float)
+    #     npfl139.update_params_by_ema(self._target_critic1, self._critic1, self.args.target_tau)
+    #     npfl139.update_params_by_ema(self._target_critic2, self._critic2, self.args.target_tau)
 
     # Predict actions without sampling.
     @npfl139.typed_torch_function(device, torch.float32)
