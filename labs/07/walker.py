@@ -27,13 +27,13 @@ parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evalua
 parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=0.0003, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="walker_models/walker", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="walker_models/walker_193", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path", default="walker_models/walker_312", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
-parser.add_argument("--target_return", default=250, type=float, help="Target return.")
+parser.add_argument("--target_return", default=350, type=float, help="Target return.")
 parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 class Agent:
@@ -196,43 +196,6 @@ class Agent:
         # Create MSE loss.
         self._mse_loss = torch.nn.MSELoss()
 
-
-    # @npfl139.typed_torch_function(device, torch.float32, torch.float32, torch.float32)
-    # def train(self, states: torch.Tensor, actions: torch.Tensor, returns: torch.Tensor) -> None:
-    #     # 1) Actor update
-    #     new_actions, log_prob, alpha = self._actor(states, sample=True)
-    #     q1_actor = self._critic1(states, new_actions)
-    #     q2_actor = self._critic2(states, new_actions)
-
-    #     actor_loss = (alpha.detach() * log_prob - torch.minimum(q1_actor, q2_actor)).mean()
-
-    #     self._actor_optimizer.zero_grad()
-    #     actor_loss.backward()
-    #     self._actor_optimizer.step()
-
-    #     # 2) Alpha update
-    #     _, log_prob_alpha, alpha = self._actor(states, sample=True)
-    #     alpha_loss = (-alpha * (log_prob_alpha.detach() + self._target_entropy)).mean()
-
-    #     self._alpha_optimizer.zero_grad()
-    #     alpha_loss.backward()
-    #     self._alpha_optimizer.step()
-
-    #     # 3) Critic update
-    #     q1 = self._critic1(states, actions).squeeze(-1)
-    #     q2 = self._critic2(states, actions).squeeze(-1)
-
-    #     critic_loss = self._mse_loss(q1, returns) + self._mse_loss(q2, returns)
-
-    #     self._critic_optimizer.zero_grad()
-    #     critic_loss.backward()
-    #     self._critic_optimizer.step()
-
-    #     # 4) Target critics EMA update
-    #     npfl139.update_params_by_ema(self._target_critic1, self._critic1, self.args.target_tau)
-    #     npfl139.update_params_by_ema(self._target_critic2, self._critic2, self.args.target_tau)
-
-
     # The `npfl139.typed_torch_function` automatically converts input arguments
     # to PyTorch tensors of given type, and converts the result to a NumPy array.
     @npfl139.typed_torch_function(device, torch.float32, torch.float32, torch.float32)
@@ -342,6 +305,17 @@ class Agent:
             args = json.load(file)
         return argparse.Namespace(**args)
 
+def extract_score_from_model_path(path: str) -> float | None:
+    filename = os.path.basename(path)
+    parts = filename.split("_")
+    if not parts:
+        return None
+
+    last_part = parts[-1]
+    try:
+        return float(last_part)
+    except ValueError:
+        return None
 
 def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Set the random seed and the number of threads.
@@ -362,8 +336,13 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             rewards += reward
         return rewards
 
+    best_return = -100
     if args.load_pretrained_models or args.recodex:
         agent.load_models(args.load_model_path)
+        score = extract_score_from_model_path(args.load_model_path)
+        if score is None:
+            best_return = score
+            print(f"Loaded best_return: {best_return}")
     
     # ReCodEx evaluation.
     if args.recodex:
@@ -378,7 +357,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     replay_buffer = npfl139.ReplayBuffer(args.replay_buffer_size, args.seed)
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
-    best_return = -100
     state = vector_env.reset(seed=args.seed)[0]
     training = True
     while training:
@@ -397,7 +375,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             state = next_state
 
             # Training
-            if len(replay_buffer) >= 10 * args.batch_size:
+            if len(replay_buffer) >= 15 * args.batch_size:
                 # Randomly uniformly sample transitions from the replay buffer.
                 states, actions, rewards, dones, next_states = replay_buffer.sample(args.batch_size)
                 # TODO: Perform the training
@@ -417,7 +395,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 best_return = avg_return_long
                 agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
                 agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
-            elif(avg_return_long >= 200):
+            elif(avg_return_long >= 200 and avg_return_long >= (best_return-20)):
                 agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
                 agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
             if avg_return_long >= args.target_return:
