@@ -340,7 +340,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     if args.load_pretrained_models or args.recodex:
         agent.load_models(args.load_model_path)
         score = extract_score_from_model_path(args.load_model_path)
-        if score is None:
+        if score is not None:
             best_return = score
             print(f"Loaded best_return: {best_return}")
     
