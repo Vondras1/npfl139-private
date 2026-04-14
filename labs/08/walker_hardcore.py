@@ -34,8 +34,8 @@ parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluat
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="walker_hard_models/walker_hard", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="walker_models/walker_317", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--model_path", default="walker_hard_models/walker", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="walker_hard_models/walker_-60", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
@@ -345,10 +345,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     best_return = -100
     if args.load_pretrained_models or args.recodex:
         agent.load_models(args.load_model_path)
-        # score = extract_score_from_model_path(args.load_model_path)
-        # if score is not None:
-        #     best_return = score
-        #     print(f"Loaded best_return: {best_return}")
+        score = extract_score_from_model_path(args.load_model_path)
+        if score is not None:
+            best_return = score
+            print(f"Loaded best_return: {best_return}")
     
     # ReCodEx evaluation.
     if args.recodex:
