@@ -415,7 +415,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     while True:
         evaluate_episode(start_evaluation=True)
 
-
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
 
