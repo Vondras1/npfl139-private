@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-# Team:
-# 1ac5d633-f96f-42a3-846d-31bcb01d041f
-# e0cfa255-0259-11eb-9574-ea7484399335
-# 9fafb47f-e1c5-4d7c-8ce5-8a6f5bdcd751
-
 import argparse
 import collections
 import copy
@@ -33,8 +28,8 @@ parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluat
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="walker_models/walker", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="walker_models/walker_312", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--model_path", default="walker", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="walker_312", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")

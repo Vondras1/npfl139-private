@@ -67,7 +67,7 @@ class Critic(torch.nn.Module):
 
 class Agent:
     # Use GPU if available.
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(torch.accelerator.current_accelerator() if torch.accelerator.is_available() else "cpu")
 
     def __init__(self, env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # TODO: Create:
