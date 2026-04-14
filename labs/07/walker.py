@@ -33,6 +33,7 @@ parser.add_argument("--load_model_path", default="walker_models/walker_193", typ
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
+parser.add_argument("--target_return", default=250, type=float, help="Target return.")
 parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 class Agent:
@@ -379,10 +380,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     replay_buffer = npfl139.ReplayBuffer(args.replay_buffer_size, args.seed)
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
-    target_return = 250
     best_return = -100
-    log_path = os.path.splitext(args.model_path)[0] + ".txt"
-
     state = vector_env.reset(seed=args.seed)[0]
     training = True
     while training:
@@ -399,7 +397,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
             replay_buffer.append_batch(Transition(state, action, reward, done, next_state))
             state = next_state
-
 
             # Training
             if len(replay_buffer) >= 10 * args.batch_size:
@@ -425,11 +422,12 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             elif(avg_return_long >= 200):
                 agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
                 agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
-            if avg_return_long >= target_return:
+            if avg_return_long >= args.target_return:
+                print(f"Target reached.")
                 break
 
-    agent.save_models(args.model_path)
-    agent.save_args(args.model_path + ".json", args)
+    agent.save_models(f"{args.model_path}_finall")
+    agent.save_args(f"{args.model_path}__finall" + ".json", args)
 
     # Final evaluation
     while True:
