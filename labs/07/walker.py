@@ -341,11 +341,13 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
             next_state, reward, terminated, truncated, _ = vector_env.step(action)
             done = terminated | truncated
+            
+            # Remove terminal penalty # TODO
+            reward = np.where(done, 0.0, reward)
+
             replay_buffer.append_batch(Transition(state, action, reward, done, next_state))
             state = next_state
 
-            # Remove terminal penalty # TODO
-            reward = np.where(done, 0.0, reward)
 
             # Training
             if len(replay_buffer) >= 10 * args.batch_size:
