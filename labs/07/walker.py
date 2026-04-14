@@ -22,7 +22,7 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=2000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
