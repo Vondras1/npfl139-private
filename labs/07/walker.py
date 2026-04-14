@@ -189,8 +189,8 @@ class Agent:
         #   - the objective for the actor itself; in this objective, `alpha.detach()`
         #     should be used (for the `alpha` returned by the actor) to avoid optimizing `alpha`,
         new_actions, log_prob, alpha = self._actor(states, sample=True)
-        q1 = self._critic1(states, new_actions)
-        q2 = self._critic2(states, new_actions)
+        q1 = self._critic1(states, new_actions).detach()
+        q2 = self._critic2(states, new_actions).detach()
 
         actor_loss = (alpha.detach() * log_prob - torch.minimum(q1,q2)).mean()
         # self._actor_optimizer.zero_grad()
@@ -341,7 +341,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
             next_state, reward, terminated, truncated, _ = vector_env.step(action)
             done = terminated | truncated
-            
+
             # Remove terminal penalty # TODO
             reward = np.where(done, 0.0, reward)
 
