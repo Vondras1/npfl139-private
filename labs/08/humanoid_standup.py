@@ -20,7 +20,7 @@ npfl139.require_version("2526.7")
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 # parser.add_argument("--env", default="HalfCheetah-v5", type=str, help="Environment.")
-parser.add_argument("--env", default="Humanoid-v5", type=str, help="Environment.")
+# parser.add_argument("--env", default="Humanoid-v5", type=str, help="Environment.")
 parser.add_argument("--env", default="HumanoidStandup-v5", type=str, help="Environment.")
 
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
@@ -30,7 +30,7 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=5000, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=10000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
@@ -413,7 +413,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             if total_avg_return >= args.target_return:
                 print(f"Target reached.")
                 break
-            
+
     agent.save_models(f"{args.model_path}_finall")
     agent.save_args(f"{args.model_path}__finall" + ".json", args)
 
