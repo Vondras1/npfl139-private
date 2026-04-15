@@ -35,7 +35,7 @@ parser.add_argument("--gamma", default=0.99, type=float, help="Discounting facto
 parser.add_argument("--hidden_layer_size", default=512, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=0.0003, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="humanoid_models/humanoid", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="humanoid_models/humanoid_0", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path", default="humanoid_models/humanoid_428", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
@@ -80,7 +80,10 @@ class Agent:
                 #   - `mus` (the means),
                 #   - `sds` (the standard deviations).
                 mus = self.generate_means(x)
-                sds = torch.exp(self.generate_sds(x))
+                # sds = torch.exp(self.generate_sds(x))
+                log_std = self.generate_sds(x)
+                log_std = torch.clamp(log_std, -20, 2)
+                sds = torch.exp(log_std)
 
                 # - Then, create the action distribution using `torch.distributions.Normal`
                 #   with the `mus` and `sds`.
@@ -397,14 +400,15 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         if avg_return_short >= best_return or avg_return_short >= 7500:
             avg_return_long = np.mean([evaluate_episode() for _ in range(args.evaluate_for_longer)])
             print("Average long evaluation return is: ", avg_return_long)
-            if avg_return_long >= best_return:
-                best_return = avg_return_long
-                agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
-                agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
-            elif(avg_return_long >= 8000 and avg_return_long >= (best_return-20)):
-                agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
-                agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
-            if avg_return_long >= args.target_return:
+            total_avg_return = (avg_return_long*args.evaluate_for_longer+avg_return_short*args.evaluate_for_shorter)/(args.evaluate_for_longer+args.evaluate_for_shorter)
+            if total_avg_return >= best_return:
+                best_return = total_avg_return
+                agent.save_models(f"{args.model_path}_{round(total_avg_return)}")
+                agent.save_args(f"{args.model_path}_{round(total_avg_return)}.json", args)
+            elif(total_avg_return >= 8000 and total_avg_return >= (best_return-20)):
+                agent.save_models(f"{args.model_path}_{round(total_avg_return)}")
+                agent.save_args(f"{args.model_path}_{round(total_avg_return)}.json", args)
+            if total_avg_return >= args.target_return:
                 print(f"Target reached.")
                 break
 
