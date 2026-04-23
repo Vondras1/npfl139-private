@@ -24,10 +24,10 @@ parser.add_argument("--hidden_layer", default=None, type=int, help="Hidden layer
 parser.add_argument("--memory_cells", default=None, type=int, help="Number of memory cells; default 2*`cards`")
 parser.add_argument("--memory_cell_size", default=None, type=int, help="Memory cell size; default 3/2*`cards`")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate")
-parser.add_argument("--model_path", default="memory_models/classic", type=str, help="Model path")
-parser.add_argument("--load_model_path_4", default="memory_models/classic_4", type=str, help="Model path of pretrained model we want to load.")
-parser.add_argument("--load_model_path_8", default="memory_models/classic_8", type=str, help="Model path of pretrained model we want to load.")
-parser.add_argument("--load_model_path_16", default="memory_models/classic_16", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--model_path", default="classic", type=str, help="Model path")
+parser.add_argument("--load_model_path_4", default="classic_4", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path_8", default="classic_8", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path_16", default="classic_16", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--load_pretrained", default=False, action="store_true", help="Load pretrained models.")
 
 

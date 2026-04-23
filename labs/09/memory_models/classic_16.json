@@ -1,0 +1,19 @@
+{
+  "cards": 16,
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "batch_size": 32,
+  "evaluate_each": 1280,
+  "evaluate_for": 100,
+  "hidden_layer": 128,
+  "memory_cells": 32,
+  "memory_cell_size": 24,
+  "learning_rate": 0.001,
+  "model_path": "memory_models/classic",
+  "load_model_path_4": "memory_models/classic_4",
+  "load_model_path_8": "memory_models/classic_8",
+  "load_model_path_16": "memory_models/classic_16",
+  "load_pretrained": true
+}
