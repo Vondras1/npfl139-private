@@ -1,0 +1,20 @@
+{
+  "env": "HalfCheetah-v5",
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 12,
+  "batch_size": 256,
+  "evaluate_each": 1000,
+  "evaluate_for": 10,
+  "gamma": 0.99,
+  "hidden_layer_size": 256,
+  "learning_rate": 0.0003,
+  "replay_buffer_size": 300000,
+  "target_tau": 0.005,
+  "model_path": "cheetah_ddpg_actor.pt",
+  "envs": 16,
+  "exploration_noise": 0.1,
+  "min_buffer_size": 10000,
+  "target_return": 8200
+}

@@ -19,8 +19,8 @@ npfl139.require_version("2526.7")
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-# parser.add_argument("--env", default="HalfCheetah-v5", type=str, help="Environment.")
-parser.add_argument("--env", default="Humanoid-v5", type=str, help="Environment.")
+parser.add_argument("--env", default="BipedalWalker-v3", type=str, help="Environment.")
+# parser.add_argument("--env", default="BipedalWalkerHardcore-v3", type=str, help="Environment.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
@@ -28,18 +28,18 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=10000, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--evaluate_each", default=5000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for_shorter", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_for_longer", default=40, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--hidden_layer_size", default=512, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=0.0003, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="humanoid_models/humanoid", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="humanoid_models/humanoid_4594", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
+parser.add_argument("--learning_rate", default=0.0001, type=float, help="Learning rate.")
+parser.add_argument("--model_path", default="walker_models/walker", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="walker_models/walker_312", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
-parser.add_argument("--target_return", default=8500, type=float, help="Target return.")
+parser.add_argument("--target_return", default=350, type=float, help="Target return.")
 parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 class Agent:
@@ -80,10 +80,7 @@ class Agent:
                 #   - `mus` (the means),
                 #   - `sds` (the standard deviations).
                 mus = self.generate_means(x)
-                # sds = torch.exp(self.generate_sds(x))
-                log_std = self.generate_sds(x)
-                log_std = torch.clamp(log_std, -20, 2)
-                sds = torch.exp(log_std)
+                sds = torch.exp(self.generate_sds(x))
 
                 # - Then, create the action distribution using `torch.distributions.Normal`
                 #   with the `mus` and `sds`.
@@ -185,22 +182,23 @@ class Agent:
         # self._actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
         # self._critic_optimizer = torch.optim.Adam(list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
         # self._alpha_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
-        # self._optimizer = torch.optim.Adam(list(self._actor.parameters()) + list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
+        
+        self._optimizer = torch.optim.Adam(list(self._actor.parameters()) + list(self._critic1.parameters()) + list(self._critic2.parameters()), lr=args.learning_rate)
 
-        self._actor_optimizer = torch.optim.Adam(
-            [p for n, p in self._actor.named_parameters() if n != "_log_alpha"],
-            lr=args.learning_rate
-        )
+        # self._actor_optimizer = torch.optim.Adam(
+        #     list(self._actor.parameters()),
+        #     lr=args.learning_rate
+        # )
 
-        self._critic_optimizer = torch.optim.Adam(
-            list(self._critic1.parameters()) + list(self._critic2.parameters()),
-            lr=args.learning_rate
-        )
+        # self._critic_optimizer = torch.optim.Adam(
+        #     list(self._critic1.parameters()) + list(self._critic2.parameters()),
+        #     lr=args.learning_rate
+        # )
 
-        self._alpha_optimizer = torch.optim.Adam(
-            [self._actor._log_alpha],
-            lr=args.learning_rate
-        )
+        # self._alpha_optimizer = torch.optim.Adam(
+        #     [self._actor._log_alpha],
+        #     lr=args.learning_rate
+        # )
 
         # Create MSE loss.
         self._mse_loss = torch.nn.MSELoss()
@@ -210,40 +208,62 @@ class Agent:
     @npfl139.typed_torch_function(device, torch.float32, torch.float32, torch.float32)
     def train(self, states: torch.Tensor, actions: torch.Tensor, returns: torch.Tensor) -> None:
         # TODO: Separately train:
+        self._optimizer.zero_grad()
 
         # Actor update
         # - the actor, by using two objectives:
         #   - the objective for the actor itself; in this objective, `alpha.detach()`
         #     should be used (for the `alpha` returned by the actor) to avoid optimizing `alpha`,
         new_actions, log_prob, alpha = self._actor(states, sample=True)
+
+
+
         q1 = self._critic1(states, new_actions)
         q2 = self._critic2(states, new_actions)
 
+
         actor_loss = (alpha.detach() * log_prob - torch.minimum(q1,q2)).mean()
-        self._actor_optimizer.zero_grad()
         actor_loss.backward()
-        self._actor_optimizer.step()
+
 
         # Alpha update
         #   - the objective for `alpha`, where `log_prob.detach()` should be used
         #     to avoid computing gradient for other variables than `alpha`.
         #     Use `args.target_entropy` as the target entropy (the default of -1 per action
         #     component is fine and does not need to be tuned for the agent to train).
-        _, log_prob_alpha, alpha = self._actor(states, sample=True) # Use updated actor
-        alpha_loss = (-alpha * log_prob_alpha.detach() - alpha * self._target_entropy).mean()
-        self._alpha_optimizer.zero_grad()
+        # _, log_prob_alpha, alpha = self._actor(states, sample=True) # Use updated actor
+        alpha_loss = (-alpha * log_prob.detach() - alpha * self._target_entropy).mean()
         alpha_loss.backward()
-        self._alpha_optimizer.step()
+
+        # # Total loss
+        # loss = actor_loss + alpha_loss
+
+        # self._actor_optimizer.zero_grad()
+        # loss.backward()
+        # self._actor_optimizer.step()
+
+        # self._alpha_optimizer.zero_grad()
+        # alpha_loss.backward()
+        # self._alpha_optimizer.step()
 
         # Critics update
+        self._critic1.zero_grad()
+        self._critic2.zero_grad()
         # - the critics using MSE loss.
         q1 = self._critic1(states, actions).squeeze(-1)
         q2 = self._critic2(states, actions).squeeze(-1)
 
         critic_loss = self._mse_loss(q1, returns) + self._mse_loss(q2, returns)
-        self._critic_optimizer.zero_grad()
         critic_loss.backward()
-        self._critic_optimizer.step()
+        # self._critic_optimizer.zero_grad()
+        # critic_loss.backward()
+        # self._critic_optimizer.step()
+
+        # Total loss
+        # loss = actor_loss + alpha_loss + critic_loss
+
+
+        self._optimizer.step()
 
         #
         # Finally, update the two target critic networks exponential moving
@@ -377,8 +397,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             next_state, reward, terminated, truncated, _ = vector_env.step(action)
             done = terminated | truncated
 
-            # # Remove terminal penalty # TODO
-            # reward = np.where(done, 0.0, reward)
+            # Remove terminal penalty # TODO
+            reward = np.where(done, 0.0, reward)
 
             replay_buffer.append_batch(Transition(state, action, reward, done, next_state))
             state = next_state
@@ -397,20 +417,19 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         avg_return_short = np.mean(returns_short)
         print("Average short evaluation return is: ", avg_return_short)
 
-        if avg_return_short >= best_return or avg_return_short >= 7500:
-            avg_return_long = np.mean([evaluate_episode() for _ in range(args.evaluate_for_longer)])
-            print("Average long evaluation return is: ", avg_return_long)
-            total_avg_return = (avg_return_long*args.evaluate_for_longer+avg_return_short*args.evaluate_for_shorter)/(args.evaluate_for_longer+args.evaluate_for_shorter)
-            if total_avg_return >= best_return:
-                best_return = total_avg_return
-                agent.save_models(f"{args.model_path}_{round(total_avg_return)}")
-                agent.save_args(f"{args.model_path}_{round(total_avg_return)}.json", args)
-            elif(total_avg_return >= 8000 and total_avg_return >= (best_return-20)):
-                agent.save_models(f"{args.model_path}_{round(total_avg_return)}")
-                agent.save_args(f"{args.model_path}_{round(total_avg_return)}.json", args)
-            if total_avg_return >= args.target_return:
-                print(f"Target reached.")
-                break
+        # if avg_return_short >= best_return or avg_return_short >= 150:
+        #     avg_return_long = np.mean([evaluate_episode() for _ in range(args.evaluate_for_longer)])
+        #     print("Average long evaluation return is: ", avg_return_long)
+        #     if avg_return_long >= best_return:
+        #         best_return = avg_return_long
+        #         agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
+        #         agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
+        #     elif(avg_return_long >= 200 and avg_return_long >= (best_return-20)):
+        #         agent.save_models(f"{args.model_path}_{round(avg_return_long)}")
+        #         agent.save_args(f"{args.model_path}_{round(avg_return_long)}.json", args)
+        #     if avg_return_long >= args.target_return:
+        #         print(f"Target reached.")
+        #         break
 
     agent.save_models(f"{args.model_path}_finall")
     agent.save_args(f"{args.model_path}__finall" + ".json", args)
@@ -418,6 +437,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     # Final evaluation
     while True:
         evaluate_episode(start_evaluation=True)
+
 
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
