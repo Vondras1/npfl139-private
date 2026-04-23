@@ -277,3 +277,20 @@
 
 - Describe the architecture of the MERLIN model and explain its difference
   to RL-MEM model. [10]
+
+#### Questions@:, Lecture 10 Questions
+- What is the value $L_{\pi_\textrm{old}}(\pi)$ used in TRPO to approximate
+  $v_{\pi}$? What is the value the TRPO algorithm maximizes, and under
+  what constraint? [5]
+
+- Write down the PPO algorithm, including the generalized advantage estimation
+  (the $n$-step truncated lambda return. [10]
+
+- Define the Partially observable stochastic game. [5]
+
+- Define the Partially observable stochastic game, Agent-environment cycle game,
+  and prove that every POSG can be represented as AECG and vice versa. [10]
+
+- In a Partially observable stochastic game, define the expected return for
+  a given agent (including the probability of a trajectory), define the
+  best response, and define the Nash equilibrium. [10]

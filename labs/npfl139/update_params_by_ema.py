@@ -3,11 +3,8 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import os
-import random
-
-import numpy as np
 import torch
+
 
 def update_params_by_ema(target: torch.nn.Module, source: torch.nn.Module, tau: float) -> None:
     """Update target parameters using exponential moving average of the source parameters.
