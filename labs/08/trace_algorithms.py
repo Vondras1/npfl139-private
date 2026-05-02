@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Team:
+# 1ac5d633-f96f-42a3-846d-31bcb01d041f
+# e0cfa255-0259-11eb-9574-ea7484399335
+# 9fafb47f-e1c5-4d7c-8ce5-8a6f5bdcd751
 import argparse
 
 import gymnasium as gym
@@ -66,6 +70,70 @@ def main(args: argparse.Namespace) -> np.ndarray:
     for _ in range(args.episodes):
         state, done = env.reset()[0], False
 
+        # Perform the update to the state value function `V`, using
+        # a TD update with the following parameters:
+        # - `args.n`: use `args.n`-step return
+        # - if `args.trace_lambda` is not None, use the `args.n`-step truncated
+        #   lambda return with lambda of `args.trace_lambda`
+        # - `args.off_policy`:
+        #   - if False, the `args.epsilon`-greedy behavior policy is also the target policy
+        #   - if True, the target policy is an (`args.epsilon`/3)-greedy policy; use
+        #     off-policy correction using importance sampling with control variates
+        #     - if `args.vtrace_clip` is not None, clip the individual importance sample
+        #       ratios with it
+        #
+        # Perform the updates as soon as you can -- whenever you have all the information
+        # to update `V[state]`, do it.
+        #
+        # When performing off-policy estimation, use `action_prob` from the time of
+        # taking the `action` as the behavior policy action probability, and the
+        # `compute_target_policy(V)` with the current `V` (from the time of performing
+        # the update) as the target policy.
+        #
+        # Do not forget that when `done` is True, bootstrapping on the
+        # `next_state` is not used.
+        #
+        # Also note that when the episode ends and `args.n` > 1, there will
+        # be several states that also need to be updated. Perform the updates
+        # in the order in which you encountered the states in the trajectory
+        # and during these updates, use the `compute_target_policy(V)` with
+        # the up-to-date value of `V`.
+        states_buf, actions_buf, action_probs_buf = [], [], []
+        rewards_buf, next_states_buf, dones_buf = [], [], []
+
+        def update_v(tau: int, T: int) -> None:
+            target_policy = compute_target_policy(V)
+
+            correction = 0.0
+            trace = 1.0  # accumulator for gamma^k * prod_{i<k} (lambda * rho_{tau+i})
+            lam = args.trace_lambda if args.trace_lambda is not None else 1.0
+
+            for k in range(args.n):
+                idx = tau + k
+                if idx >= T:
+                    break
+
+                s = states_buf[idx]
+                a = actions_buf[idx]
+
+                if args.off_policy:
+                    rho = target_policy[s, a] / action_probs_buf[idx]
+                    if args.vtrace_clip is not None:
+                        rho = min(rho, args.vtrace_clip)
+                else:
+                    rho = 1.0
+
+                bootstrap = 0.0 if dones_buf[idx] else V[next_states_buf[idx]]
+                delta = rewards_buf[idx] + args.gamma * bootstrap - V[s]
+
+                correction += trace * rho * delta
+                trace *= args.gamma * lam * rho
+
+                if dones_buf[idx]:
+                    break
+
+            V[states_buf[tau]] += args.alpha * correction
+
         # Generate episode and update V using the given TD method
         while not done:
             best_action = argmax_with_tolerance(R[state] + (1 - D[state]) * args.gamma * V[N[state]])
@@ -75,34 +143,19 @@ def main(args: argparse.Namespace) -> np.ndarray:
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
-            # TODO: Perform the update to the state value function `V`, using
-            # a TD update with the following parameters:
-            # - `args.n`: use `args.n`-step return
-            # - if `args.trace_lambda` is not None, use the `args.n`-step truncated
-            #   lambda return with lambda of `args.trace_lambda`
-            # - `args.off_policy`:
-            #   - if False, the `args.epsilon`-greedy behavior policy is also the target policy
-            #   - if True, the target policy is an (`args.epsilon`/3)-greedy policy; use
-            #     off-policy correction using importance sampling with control variates
-            #     - if `args.vtrace_clip` is not None, clip the individual importance sample
-            #       ratios with it
-            #
-            # Perform the updates as soon as you can -- whenever you have all the information
-            # to update `V[state]`, do it.
-            #
-            # When performing off-policy estimation, use `action_prob` from the time of
-            # taking the `action` as the behavior policy action probability, and the
-            # `compute_target_policy(V)` with the current `V` (from the time of performing
-            # the update) as the target policy.
-            #
-            # Do not forget that when `done` is True, bootstrapping on the
-            # `next_state` is not used.
-            #
-            # Also note that when the episode ends and `args.n` > 1, there will
-            # be several states that also need to be updated. Perform the updates
-            # in the order in which you encountered the states in the trajectory
-            # and during these updates, use the `compute_target_policy(V)` with
-            # the up-to-date value of `V`.
+            states_buf.append(state)
+            actions_buf.append(action)
+            action_probs_buf.append(action_prob)
+            rewards_buf.append(reward)
+            next_states_buf.append(next_state)
+            dones_buf.append(done)
+            T = len(rewards_buf)
+
+            if not done and T >= args.n:
+                update_v(T - args.n, T)
+            elif done:
+                for tau in range(max(0, T - args.n), T):
+                    update_v(tau, T)
 
             state = next_state
 
@@ -120,3 +173,4 @@ if __name__ == "__main__":
             action = argmax_with_tolerance(R[state] + (1 - D[state]) * main_args.gamma * V[N[state]])
             state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
+
