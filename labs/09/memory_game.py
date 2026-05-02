@@ -11,14 +11,14 @@ npfl139.require_version("2526.9")
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--cards", default=8, type=int, help="Number of cards in the memory game.")
+parser.add_argument("--cards", default=6, type=int, help="Number of cards in the memory game.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # If you add more arguments, ReCodEx will keep them with your default values.
-parser.add_argument("--batch_size", default=32, type=int, help="Number of episodes to train on.")
-parser.add_argument("--evaluate_each", default=1280, type=int, help="Evaluate each number of episodes.") # SP: Length of an epoch
+parser.add_argument("--batch_size", default=64, type=int, help="Number of episodes to train on.")
+parser.add_argument("--evaluate_each", default=10000, type=int, help="Evaluate each number of episodes.") # SP: Length of an epoch
 parser.add_argument("--evaluate_for", default=100, type=int, help="Evaluate for number of episodes.") # SP: Number of epochs
 parser.add_argument("--hidden_layer", default=None, type=int, help="Hidden layer size; default 8*`cards`")
 parser.add_argument("--memory_cells", default=None, type=int, help="Number of memory cells; default 2*`cards`")
@@ -64,8 +64,6 @@ class Agent:
                 if memory.dim() == 2:
                     memory = memory.unsqueeze(0)      # [1, M, D]
                     single = True
-                if observation.dim() == 1:
-                    observation = observation.unsqueeze(0)  # [1, 2]
 
                 # Encode the input observation, which is a (card, observation) pair,
                 # by representing each element as one-hot and concatenating them, resulting
@@ -108,7 +106,7 @@ class Agent:
         self._model = Model().to(self.device)
 
         # TODO: Create an optimizer and a loss function.
-        self._model = Model().to(self.device)
+        # self._model = Model().to(self.device)
         self._optimizer = torch.optim.Adam(self._model.parameters(), lr=args.learning_rate)
         self._loss_function = torch.nn.CrossEntropyLoss(reduction="mean") # Sequences may have different length
 

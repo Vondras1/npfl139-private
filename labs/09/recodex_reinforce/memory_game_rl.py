@@ -27,11 +27,10 @@ parser.add_argument("--memory_cells", default=None, type=int, help="Number of me
 parser.add_argument("--memory_cell_size", default=None, type=int, help="Memory cell size; default 3/2*`cards`")
 parser.add_argument("--learning_rate", default=0.001, type=float)
 parser.add_argument("--model_path", default="memory_models/reinforce", type=str, help="Model path")
-parser.add_argument("--load_model_path_4", default="memory_models/reinforce_4", type=str, help="Model path of pretrained model we want to load.")
-parser.add_argument("--load_model_path_6", default="memory_models/reinforce_6", type=str, help="Model path of pretrained model we want to load.")
-parser.add_argument("--load_model_path_8", default="memory_models/reinforce_8", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path_4", default="reinforce_4", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path_6", default="reinforce_6", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--load_model_path_8", default="reinforce_8", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--load_pretrained", default=False, action="store_true", help="Load pretrained models.")
-
 
 class Agent:
     device = torch.device("cpu")

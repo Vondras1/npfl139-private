@@ -1,0 +1,21 @@
+{
+  "cards": 8,
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "batch_size": 64,
+  "gradient_clipping": 1.0,
+  "entropy_regularization": 0.1,
+  "evaluate_each": 5000,
+  "evaluate_for": 100,
+  "hidden_layer": 64,
+  "memory_cells": 16,
+  "memory_cell_size": 12,
+  "learning_rate": 0.001,
+  "model_path": "memory_models/reinforce",
+  "load_model_path_4": "memory_models/reinforce_4",
+  "load_model_path_6": "memory_models/reinforce_6",
+  "load_model_path_8": "memory_models/classic_8",
+  "load_pretrained": true
+}
