@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-# Team:
-# 1ac5d633-f96f-42a3-846d-31bcb01d041f
-# e0cfa255-0259-11eb-9574-ea7484399335
-# 9fafb47f-e1c5-4d7c-8ce5-8a6f5bdcd751
-
 import argparse
 import json
 import os
@@ -37,8 +32,8 @@ parser.add_argument("--worker_steps", default=128, type=int, help="Steps for eac
 # No need to tune this
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each given number of iterations.")
-parser.add_argument("--model_path", default="models/ppo", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="models/ppo_530", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--model_path", default="ppo", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="ppo_545", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 
@@ -307,7 +302,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 agent.save_models(f"{args.model_path}_{round(mean)}")
                 agent.save_args(f"{args.model_path}_{round(mean)}.json", args)
                 print(f"New best performing model saved. Score: {best_return}, path: {args.model_path}_{round(mean)}")
-            if mean >= 600:
+            if mean >= 500:
                 print(f"Target reached.")
                 break
 

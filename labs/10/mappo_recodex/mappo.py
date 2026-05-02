@@ -37,8 +37,8 @@ parser.add_argument("--worker_steps", default=256, type=int, help="Steps for eac
 # No need to tune this
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each given number of iterations.")
-parser.add_argument("--model_path", default="models_mappo/mappo", type=str, help="Model path")
-parser.add_argument("--load_model_path", default="models_mappo/mappo_554", type=str, help="Model path of pretrained model we want to load.")
+parser.add_argument("--model_path", default="mappo", type=str, help="Model path")
+parser.add_argument("--load_model_path", default="mappo_554", type=str, help="Model path of pretrained model we want to load.")
 parser.add_argument("--load_pretrained_models", default=False, action="store_true", help="Load pretrained models.")
 
 
