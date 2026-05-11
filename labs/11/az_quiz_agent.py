@@ -26,8 +26,8 @@ parser.add_argument("--num_simulations", default=800, type=int, help="Number of 
 parser.add_argument("--replay_buffer_length", default=10000, type=int, help="Replay buffer max length.")
 parser.add_argument("--sampling_moves", default=10, type=int, help="Sampling moves.")
 parser.add_argument("--show_sim_games", default=False, action="store_true", help="Show simulated games.")
-parser.add_argument("--sim_games", default=4, type=int, help="Simulated games to generate in every iteration.")
-parser.add_argument("--train_for", default=1, type=int, help="Update steps in every iteration.")
+parser.add_argument("--sim_games", default=12, type=int, help="Simulated games to generate in every iteration.")
+parser.add_argument("--train_for", default=12, type=int, help="Update steps in every iteration.")
 
 
 #########
@@ -220,7 +220,7 @@ class MCTNode:
             else:
                 valid_priors = np.ones(len(valid_actions)) / len(valid_actions)
 
-            
+
             for i, action in enumerate(valid_actions):
                 self.children[action] = MCTNode(valid_priors[i])
 
@@ -401,6 +401,7 @@ def train(args: argparse.Namespace) -> Agent:
 
     iteration = 0
     training = True
+    best_return = 0
     while training:
         iteration += 1
 
@@ -452,10 +453,13 @@ def train(args: argparse.Namespace) -> Agent:
             )
             print(f"Evaluation after iteration {iteration}: {100 * score:.1f}%", flush=True)
 
-            if score >= 0.30:
-                agent.save(args.model_path)
+            if score >= best_return:
+                best_return = score
+                agent.save(f"{args.model_path}_{round(score*100)}")
+                print(f"New best performing model saved. Score: {best_return}, path: {args.model_path}_{round(score*100)}")
 
                 if score >= 0.98:
+                    print("Target performance reached, stopping training.")
                     training = False
 
     return agent
