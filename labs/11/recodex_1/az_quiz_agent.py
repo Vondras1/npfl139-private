@@ -3,9 +3,6 @@ import argparse
 import collections
 import math
 
-from pathlib import Path
-import json
-
 import numpy as np
 import torch
 
@@ -24,35 +21,14 @@ parser.add_argument("--alpha", default=0.15, type=float, help="MCTS root Dirichl
 parser.add_argument("--batch_size", default=256, type=int, help="Number of game positions to train on.")
 parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploration epsilon in root")
 parser.add_argument("--evaluate_each", default=1, type=int, help="Evaluate each number of iterations.")
-parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=0.1, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="az_quiz2.pt", type=str, help="Model path")
-parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.")
+parser.add_argument("--num_simulations", default=400, type=int, help="Number of simulations in one MCTS.")
 parser.add_argument("--replay_buffer_length", default=10000, type=int, help="Replay buffer max length.")
 parser.add_argument("--sampling_moves", default=10, type=int, help="Sampling moves.")
 parser.add_argument("--show_sim_games", default=False, action="store_true", help="Show simulated games.")
 parser.add_argument("--sim_games", default=4, type=int, help="Simulated games to generate in every iteration.")
-parser.add_argument("--train_for", default=4, type=int, help="Update steps in every iteration.")
-
-parser.add_argument("--save_dir", default="models", type=str, help="Directory for saved models.")
-parser.add_argument("--run_name", default=None, type=str, help="Optional experiment name.")
-
-
-def prepare_model_path(args: argparse.Namespace) -> Path:
-    save_dir = Path(args.save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.run_name is None:
-        run_name = (
-            f"az_quiz"
-            f"_alpha{args.alpha}"
-            f"_lr{args.learning_rate}"
-            f"_sim{args.num_simulations}"
-            f"_sample{args.sampling_moves}"
-        )
-    else:
-        run_name = args.run_name
-
-    return save_dir / f"{run_name}.pt"
+parser.add_argument("--train_for", default=2, type=int, help="Update steps in every iteration.")
 
 
 #########
@@ -434,13 +410,6 @@ def train(args: argparse.Namespace) -> Agent:
     agent = Agent(args)
     replay_buffer = npfl139.ReplayBuffer(max_length=args.replay_buffer_length)
 
-    model_path = prepare_model_path(args)
-
-    # Save experiment config next to the model.
-    config_path = model_path.with_suffix(".json")
-    with open(config_path, "w") as f:
-        json.dump(vars(args), f, indent=2)
-
     iteration = 0
     training = True
     best_return = 0
@@ -497,19 +466,12 @@ def train(args: argparse.Namespace) -> Agent:
 
             if score >= best_return:
                 best_return = score
+                agent.save(f"{args.model_path}_{round(score*100)}")
+                print(f"New best performing model saved. Score: {best_return}, path: {args.model_path}_{round(score*100)}")
 
-                agent.save(str(model_path))
-
-                print(
-                    f"New best model saved. "
-                    f"Score: {100 * best_return:.1f}%, "
-                    f"path: {model_path}",
-                    flush=True,
-                )
-
-                # if score >= 0.98:
-                #     print("Target performance reached, stopping training.")
-                #     training = False
+                if score >= 0.98:
+                    print("Target performance reached, stopping training.")
+                    training = False
 
     return agent
 

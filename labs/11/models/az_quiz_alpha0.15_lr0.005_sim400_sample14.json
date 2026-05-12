@@ -1,0 +1,20 @@
+{
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "alpha": 0.15,
+  "batch_size": 256,
+  "epsilon": 0.25,
+  "evaluate_each": 1,
+  "learning_rate": 0.005,
+  "model_path": "az_quiz2.pt",
+  "num_simulations": 400,
+  "replay_buffer_length": 10000,
+  "sampling_moves": 14,
+  "show_sim_games": false,
+  "sim_games": 4,
+  "train_for": 2,
+  "save_dir": "models",
+  "run_name": null
+}
