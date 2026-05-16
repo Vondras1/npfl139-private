@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 import npfl139
-npfl139.require_version("2526.11.1")
+npfl139.require_version("2526.11.2")
 from npfl139.board_games import AZQuiz
 
 parser = argparse.ArgumentParser()
@@ -396,6 +396,7 @@ def sim_game(agent: Agent, args: argparse.Namespace) -> list[ReplayBufferEntry]:
     history = []
     # while not game.outcome(game.to_play):
     while get_outcome(game, game.to_play) == None:
+
         # TODO: Run the `mcts` with exploration.
         policy = mcts(game, agent, args, explore=True)
 
