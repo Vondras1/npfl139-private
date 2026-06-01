@@ -71,10 +71,14 @@ class Pisqorky {
     // indicating the current player (increase `Pisqorky::C` in that case).
     for (auto field : board) {
         *output++ = field == 0;
-        *output++ = field == 1;
-        *output++ = field == 2;
+        *output++ = field == 1 + to_play;
+        *output++ = field == 2 - to_play;
     }
   }
+
+// channel 0 = empty fields
+// channel 1 = player 0 fields
+// channel 2 = player 1 fields
 
  private:
 };
