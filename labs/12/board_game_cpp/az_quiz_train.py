@@ -56,7 +56,6 @@ def prepare_model_path(args: argparse.Namespace) -> Path:
 
     return save_dir / f"{run_name}.pt"
 
-
 #########
 # Agent #
 #########

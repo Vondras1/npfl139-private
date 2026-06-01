@@ -296,7 +296,7 @@ def train(args: argparse.Namespace) -> Agent:
                 # but you can of course change it so that it does.
                 score = npfl139.board_games.evaluate(
                     Pisqorky, [Player(agent, argparse.Namespace(num_simulations=0)),
-                            Pisqorky.player_from_name("heuristic")(seed=main_args.seed)],
+                            Pisqorky.player_from_name("random")(seed=main_args.seed)],
                     games=10, first_chosen=False, render=False, verbose=True,
                 )
                 print(f"Evaluation after iteration {iteration}: {100 * score:.1f}%", flush=True)

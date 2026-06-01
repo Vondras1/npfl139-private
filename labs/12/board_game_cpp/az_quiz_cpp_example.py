@@ -6,6 +6,7 @@ npfl139.require_version("2526.12")
 from npfl139.board_games import AZQuiz
 import board_game_cpp
 
+
 def evaluate(boards):
     # Boards have shape `[batch_size, AZQuiz::N, AZQuiz::N, AZQuiz::C]`.
     # You should return a pair of numpy arrays:
