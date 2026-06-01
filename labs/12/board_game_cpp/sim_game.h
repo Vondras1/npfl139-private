@@ -39,6 +39,43 @@ class SimGame {
         // however, `mcts` wants a function pointer as the `Evaluator<G>`, so you need to use
         // `std::bind_front(&SimGame::worker_evaluator, this)` as the second argument of `mcts`.
 
+        G game;
+        int move_count = 0;
+
+        Evaluator<G> evaluator = std::bind_front(&SimGame::worker_evaluator, this);
+
+        while (game.outcome(game.to_play) == Outcome::UNFINISHED) {
+          Policy<G> policy;
+          mcts(game, evaluator, num_simulations, epsilon, alpha, policy);
+
+          // Store the current position, MCTS policy, and player to move.
+          int8_t player = game.to_play;
+          history->push_back({game, policy, float(player)});
+
+          int action = -1;
+
+          if (move_count < sampling_moves) {
+            std::discrete_distribution<int> distribution(policy.begin(), policy.end());
+            action = distribution(*board_game_generator);
+          } else {
+            action = int(std::max_element(policy.begin(), policy.end()) - policy.begin());
+          }
+
+          game.move(action);
+          ++move_count;
+        }
+
+        float final_outcome = float(game.outcome(0)) - 2.0f;
+
+        for (auto& [stored_game, policy, value] : *history) {
+          int8_t player = int8_t(value); // temporarily stored player
+
+          if (player == 0)
+            value = final_outcome;
+          else
+            value = -final_outcome;
+        }
+
         // Once the whole game is finished, we pass it to processor to return it.
         {
           std::unique_lock processor_lock{processor_mutex};
