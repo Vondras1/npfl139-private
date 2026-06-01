@@ -23,20 +23,21 @@ parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
-parser.add_argument("--threads", default=64, type=int, help="Maximum number of threads to use.")
+parser.add_argument("--threads", default=256, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--alpha", default=0.15, type=float, help="MCTS root Dirichlet alpha")
-parser.add_argument("--batch_size", default=256, type=int, help="Number of game positions to train on.")
+parser.add_argument("--batch_size", default=512, type=int, help="Number of game positions to train on.")
 parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploration epsilon in root")
 parser.add_argument("--evaluate_each", default=10, type=int, help="Evaluate each number of iterations.")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="models/pisqorky.pt", type=str, help="Model path")
+parser.add_argument("--model_path", default="models/pisqorky_alpha0.15_lr0.001_sim800_sample30.pt", type=str, help="Model path")
 parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.")
 parser.add_argument("--replay_buffer_length", default=40000, type=int, help="Replay buffer max length.")
 parser.add_argument("--sampling_moves", default=30, type=int, help="Sampling moves.")
 parser.add_argument("--show_sim_games", default=False, action="store_true", help="Show simulated games.")
 parser.add_argument("--sim_games", default=3, type=int, help="Simulated games to generate in every iteration.")
 parser.add_argument("--train_for", default=10, type=int, help="Update steps in every iteration.")
+parser.add_argument("--resume", default=False, action="store_true", help="Continue training from model_path.")
 
 parser.add_argument("--save_dir", default="models", type=str, help="Directory for saved models.")
 parser.add_argument("--run_name", default=None, type=str, help="Optional experiment name.")
@@ -121,7 +122,6 @@ class Agent:
         #   to 2, flattens, and produces expected return using an output dense layer with
         #   `tanh` activation.
         
-        self.filters = 20
         self.board_shape = (3, 15, 15)
         self.num_actions = 225 # 28 possible actions (fields)
 
@@ -214,7 +214,12 @@ def augment_board_and_policy(board: np.ndarray, policy: np.ndarray):
 
 def train(args: argparse.Namespace) -> Agent:
     # Perform training
-    agent = Agent(args)
+    if args.resume:
+        print(f"Loading model from {args.model_path}", flush=True)
+        agent = Agent.load(args.model_path, args)
+    else:
+        agent = Agent(args)
+
     replay_buffer = npfl139.ReplayBuffer(max_length=args.replay_buffer_length)
 
     def evaluate(boards):
