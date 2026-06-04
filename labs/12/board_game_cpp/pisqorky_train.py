@@ -31,16 +31,19 @@ parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploratio
 parser.add_argument("--evaluate_each", default=10, type=int, help="Evaluate each number of iterations.")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="models/pisqorky_alpha0.15_lr0.001_sim800_sample31.pt", type=str, help="Model path")
-parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.")
-parser.add_argument("--replay_buffer_length", default=40000, type=int, help="Replay buffer max length.")
-parser.add_argument("--sampling_moves", default=30, type=int, help="Sampling moves.")
+parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.") # 1024
+parser.add_argument("--replay_buffer_length", default=500_000, type=int, help="Replay buffer max length.")
+parser.add_argument("--sampling_moves", default=10, type=int, help="Sampling moves.")
 parser.add_argument("--show_sim_games", default=False, action="store_true", help="Show simulated games.")
-parser.add_argument("--sim_games", default=3, type=int, help="Simulated games to generate in every iteration.")
-parser.add_argument("--train_for", default=10, type=int, help="Update steps in every iteration.")
+parser.add_argument("--sim_games", default=64, type=int, help="Simulated games to generate in every iteration.")
+parser.add_argument("--train_for", default=70, type=int, help="Update steps in every iteration.")
 parser.add_argument("--resume", default=False, action="store_true", help="Continue training from model_path.")
+
+parser.add_argument("--opponent", default="heuristic", type=str, help="Choose opponent for evaluation. Options: 'heuristic', 'random'.")
 
 parser.add_argument("--save_dir", default="models", type=str, help="Directory for saved models.")
 parser.add_argument("--run_name", default=None, type=str, help="Optional experiment name.")
+
 
 def prepare_model_path(args: argparse.Namespace) -> Path:
     save_dir = Path(args.save_dir)
@@ -63,52 +66,73 @@ def prepare_model_path(args: argparse.Namespace) -> Path:
 #########
 # Agent #
 #########
+class ResidualBlock(torch.nn.Module):
+    def __init__(self, channels: int):
+        super().__init__()
+        self._block = torch.nn.Sequential(
+            torch.nn.BatchNorm2d(channels),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(channels, channels, 3, padding='same', bias=False),
+            torch.nn.BatchNorm2d(channels),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(channels, channels, 3, padding='same', bias=False),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self._block(x)
+
 class Agent:
     # Use GPU if available.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     class Model(torch.nn.Module):
-        def __init__(self, board_shape, num_actions):
+        def __init__(self, in_channels: int, num_channels: int, num_res_blocks: int, n_actions: int, size: int):
             super().__init__()
 
-            filters = 48
-
-            self.backbone = torch.nn.Sequential(
-                torch.nn.Conv2d(3, filters, kernel_size=3, padding=1),
+            self.shared_layers = [
+                torch.nn.Conv2d(in_channels, num_channels, 3, padding='same', bias=False),
+                torch.nn.BatchNorm2d(num_channels),
                 torch.nn.ReLU(),
-                torch.nn.Conv2d(filters, filters, kernel_size=3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(filters, filters, kernel_size=3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(filters, filters, kernel_size=3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(filters, filters, kernel_size=3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(filters, filters, kernel_size=3, padding=1),
+            ]
+            for _ in range(num_res_blocks):
+                self.shared_layers += [
+                    ResidualBlock(num_channels),
+                ]
+            self._shared = torch.nn.Sequential(
+                *self.shared_layers,
+                torch.nn.BatchNorm2d(num_channels),
                 torch.nn.ReLU(),
             )
 
-            self.policy_head = torch.nn.Sequential(
-                torch.nn.Conv2d(filters, 2, kernel_size=3, padding=1),
+            self._policy_head = torch.nn.Sequential(
+                torch.nn.Conv2d(num_channels, 2, 1, padding='same', bias=False),
+                torch.nn.BatchNorm2d(2),
                 torch.nn.ReLU(),
                 torch.nn.Flatten(),
-                torch.nn.Linear(2 * board_shape[1] * board_shape[2], num_actions),
+                torch.nn.Linear(2 * size * size, n_actions),
             )
 
-            self.value_head = torch.nn.Sequential(
-                torch.nn.Conv2d(filters, 2, kernel_size=3, padding=1),
+            self._value_head = torch.nn.Sequential(
+                torch.nn.Conv2d(num_channels, 1, 1, padding='same', bias=False),
+                torch.nn.BatchNorm2d(1),
                 torch.nn.ReLU(),
                 torch.nn.Flatten(),
-                torch.nn.Linear(2 * board_shape[1] * board_shape[2], 1),
+                torch.nn.Linear(1 * size * size, 256),
+                torch.nn.ReLU(),
+                torch.nn.Linear(256, 1),
                 torch.nn.Tanh(),
             )
 
         def forward(self, boards):
             boards = boards.permute(0, 3, 1, 2)
-            features = self.backbone(boards)
-            policy_logits = self.policy_head(features)
-            values = self.value_head(features).squeeze(-1)
+
+            features = self._shared(boards)
+
+            policy_logits = self._policy_head(features)
+            values = self._value_head(features).squeeze(-1)
+
             return policy_logits, values
+        
 
     def __init__(self, args: argparse.Namespace):
         # TODO: Define an agent network in `self._model`.
@@ -123,9 +147,9 @@ class Agent:
         #   `tanh` activation.
         
         self.board_shape = (3, 15, 15)
-        self.num_actions = 225 # 28 possible actions (fields)
+        self.num_actions = 225
 
-        self._model = self.Model(self.board_shape, self.num_actions).to(self.device)
+        self._model = self.Model(in_channels=self.board_shape[0], num_channels=64, num_res_blocks=5, n_actions=self.num_actions, size=self.board_shape[1]).to(self.device)
 
         self.policy_loss = torch.nn.CrossEntropyLoss()
         self.value_loss = torch.nn.MSELoss()
@@ -301,7 +325,7 @@ def train(args: argparse.Namespace) -> Agent:
                 # but you can of course change it so that it does.
                 score = npfl139.board_games.evaluate(
                     Pisqorky, [Player(agent, argparse.Namespace(num_simulations=0)),
-                            Pisqorky.player_from_name("random")(seed=main_args.seed)],
+                            Pisqorky.player_from_name(args.opponent)(seed=main_args.seed)],
                     games=10, first_chosen=False, render=False, verbose=True,
                 )
                 print(f"Evaluation after iteration {iteration}: {100 * score:.1f}%", flush=True)
@@ -395,11 +419,11 @@ if __name__ == "__main__":
 
     # Run an evaluation versus the simple heuristic with the same parameters as in ReCodEx.
     npfl139.board_games.evaluate(
-        Pisqorky, [player, Pisqorky.player_from_name("random")(seed=main_args.seed)],
+        Pisqorky, [player, Pisqorky.player_from_name(main_args.opponent)(seed=main_args.seed)],
         games=56, first_chosen=False, render=False, verbose=True,
     )
 
-    # My agent againt myself
+    # My pretrained agent againt myself
     # npfl139.board_games.evaluate(
     #     Pisqorky,
     #     [player, Pisqorky.player_from_name("mouse")()],
