@@ -30,7 +30,7 @@ parser.add_argument("--batch_size", default=512, type=int, help="Number of game 
 parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploration epsilon in root")
 parser.add_argument("--evaluate_each", default=10, type=int, help="Evaluate each number of iterations.")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="models/pisqorky_alpha0.15_lr0.001_sim800_sample30.pt", type=str, help="Model path")
+parser.add_argument("--model_path", default="models/pisqorky_alpha0.15_lr0.001_sim800_sample31.pt", type=str, help="Model path")
 parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.")
 parser.add_argument("--replay_buffer_length", default=40000, type=int, help="Replay buffer max length.")
 parser.add_argument("--sampling_moves", default=30, type=int, help="Sampling moves.")
@@ -398,3 +398,13 @@ if __name__ == "__main__":
         Pisqorky, [player, Pisqorky.player_from_name("random")(seed=main_args.seed)],
         games=56, first_chosen=False, render=False, verbose=True,
     )
+
+    # My agent againt myself
+    # npfl139.board_games.evaluate(
+    #     Pisqorky,
+    #     [player, Pisqorky.player_from_name("mouse")()],
+    #     games=1,
+    #     first_chosen=False,
+    #     render=True,
+    #     verbose=True,
+    # )
