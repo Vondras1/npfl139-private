@@ -1,0 +1,21 @@
+{
+  "recodex": false,
+  "seed": null,
+  "threads": 256,
+  "alpha": 0.15,
+  "batch_size": 512,
+  "epsilon": 0.25,
+  "evaluate_each": 10,
+  "learning_rate": 0.001,
+  "model_path": "models/pisqorky_alpha0.15_lr0.001_sim800_sample31.pt",
+  "num_simulations": 800,
+  "replay_buffer_length": 500000,
+  "sampling_moves": 10,
+  "show_sim_games": false,
+  "sim_games": 64,
+  "train_for": 70,
+  "resume": false,
+  "opponent": "heuristic",
+  "save_dir": "models",
+  "run_name": "pisqorky_heuristic_v2"
+}

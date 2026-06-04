@@ -1,0 +1,19 @@
+{
+  "recodex": false,
+  "seed": null,
+  "threads": 64,
+  "alpha": 0.15,
+  "batch_size": 512,
+  "epsilon": 0.25,
+  "evaluate_each": 10,
+  "learning_rate": 0.001,
+  "model_path": "models/pisqorky.pt",
+  "num_simulations": 800,
+  "replay_buffer_length": 40000,
+  "sampling_moves": 30,
+  "show_sim_games": false,
+  "sim_games": 3,
+  "train_for": 10,
+  "save_dir": "models",
+  "run_name": null
+}

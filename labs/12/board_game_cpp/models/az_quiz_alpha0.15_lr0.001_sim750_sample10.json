@@ -1,0 +1,20 @@
+{
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 256,
+  "alpha": 0.15,
+  "batch_size": 256,
+  "epsilon": 0.25,
+  "evaluate_each": 2,
+  "learning_rate": 0.001,
+  "model_path": "models/az_quiz_alpha0.15_lr0.001_sim750_sample10.pt",
+  "num_simulations": 750,
+  "replay_buffer_length": 10000,
+  "sampling_moves": 10,
+  "show_sim_games": false,
+  "sim_games": 4,
+  "train_for": 10,
+  "save_dir": "models",
+  "run_name": null
+}
