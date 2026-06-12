@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 import npfl139
-npfl139.require_version("2526.11.2")
+npfl139.require_version("2526.11.1")
 from npfl139.board_games import AZQuiz
 
 parser = argparse.ArgumentParser()
@@ -25,7 +25,7 @@ parser.add_argument("--batch_size", default=256, type=int, help="Number of game 
 parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploration epsilon in root")
 parser.add_argument("--evaluate_each", default=1, type=int, help="Evaluate each number of iterations.")
 parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
-parser.add_argument("--model_path", default="az_quiz2.pt", type=str, help="Model path")
+parser.add_argument("--model_path", default="az_quiz_alpha0.3_lr0.001_sim800_sample12.pt", type=str, help="Model path")
 parser.add_argument("--num_simulations", default=800, type=int, help="Number of simulations in one MCTS.")
 parser.add_argument("--replay_buffer_length", default=10000, type=int, help="Replay buffer max length.")
 parser.add_argument("--sampling_moves", default=10, type=int, help="Sampling moves.")
@@ -396,7 +396,6 @@ def sim_game(agent: Agent, args: argparse.Namespace) -> list[ReplayBufferEntry]:
     history = []
     # while not game.outcome(game.to_play):
     while get_outcome(game, game.to_play) == None:
-
         # TODO: Run the `mcts` with exploration.
         policy = mcts(game, agent, args, explore=True)
 
@@ -413,6 +412,7 @@ def sim_game(agent: Agent, args: argparse.Namespace) -> list[ReplayBufferEntry]:
     
     # final_outcome = game.outcome(0).value  # Outcome from the perspective of player 0
     final_outcome = get_outcome(game, 0)
+    # print("f = ", final_outcome)
 
     # TODO: Return all encountered game states, each consisting of
     # - the board (probably via `agent.board_features`),
