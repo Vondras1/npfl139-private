@@ -31,6 +31,7 @@ parser.add_argument("--load_model_path_16", default="memory_models/classic_16", 
 parser.add_argument("--load_pretrained", default=False, action="store_true", help="Load pretrained models.")
 
 
+
 class Agent:
     device = torch.device("cpu")
     # Use the following line instead to use GPU if available.
@@ -200,8 +201,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     if args.memory_cells is None:
         args.memory_cells = 2 * args.cards
     if args.memory_cell_size is None:
-        args.memory_cell_size = 3 * args.cards // 2
-    assert sum(env.observation_space.nvec) == args.memory_cell_size
+        args.memory_cell_size = 2 * args.cards
 
     # Construct the agent.
     agent = Agent(env, args)
