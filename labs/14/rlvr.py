@@ -18,16 +18,16 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--task", default="arithmetic", type=str, help="LLM task to solve.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--clip_epsilon", default=..., type=float, help="Clipping epsilon.")
+parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
+parser.add_argument("--clip_epsilon", default=0.2, type=float, help="Clipping epsilon.")
 parser.add_argument("--dev_size", default=256, type=int, help="Number of examples to evaluate.")
-parser.add_argument("--epochs", default=..., type=int, help="Epochs to train each iteration.")
+parser.add_argument("--epochs", default=4, type=int, help="Epochs to train each iteration.")
 parser.add_argument("--evaluate_each", default=10, type=int, help="Evaluate each number of episodes.")
-parser.add_argument("--learning_rate", default=..., type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
 parser.add_argument("--max_tokens", default=64, type=int, help="Maximum length of generated outputs.")
 parser.add_argument("--model_path", default="rlvr.pt", type=str, help="Path where to save the model.")
-parser.add_argument("--train_dataset", default=..., type=int, help="Train dataset size per iteration.")
-parser.add_argument("--train_outcomes", default=..., type=int, help="Number of outcomes per training prompt.")
+parser.add_argument("--train_dataset", default=8, type=int, help="Train dataset size per iteration.")
+parser.add_argument("--train_outcomes", default=8, type=int, help="Number of outcomes per training prompt.")
 
 
 class LLMAgent(torch.nn.Module):
@@ -124,7 +124,29 @@ class LLMAgent(torch.nn.Module):
         # (or you can use any other algorithm you find suitable). As in the Dr. GRPO paper,
         # compute the loss for every non-padding token and then average it across all valid
         # tokens in the batch.
-        ...
+        
+        # 1. Compute the new probabilities of the generated tokens using `self.token_probabilities`.
+        new_probs = self.token_probabilities(prompts, token_ids)
+
+        # 2. Compute the ratio of new probabilities to old probabilities for each token.
+        # ratios = new_probs / old_probs
+        ratios = new_probs / old_probs.clamp_min(1e-12)
+
+        # 3. Compute the clipped ratio using the `self._args.clip_epsilon` parameter.
+        cliped_ratios = torch.clamp(ratios, 1 - self._args.clip_epsilon, 1 + self._args.clip_epsilon)
+
+        # 4. Compute the loss for each token as the minimum of the unclipped and clipped ratios multiplied by the advantages.
+        advantages = advantages[:, None]
+        loss_per_token = -torch.min(ratios * advantages, cliped_ratios * advantages)
+
+        # 5. Average the loss across aall valid tokens in the batch.
+        valid_tokens_mask = token_ids != -100
+        loss = loss_per_token[valid_tokens_mask].mean()
+
+        # 6. Perform a backward pass and an optimizer step to update the model parameters.
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
 
     # Serialization methods.
     def save_lora(self, path: str) -> None:
@@ -169,12 +191,26 @@ def main(args: argparse.Namespace) -> LLMAgent | None:
         for _ in range(args.evaluate_each):
             # TODO: Create a training set for this iteration; the `task.create_dataset(size: int)`
             # method creates a list of task examples, each with a `prompt` and an `answer` attribute.
-            ...
+            train_set = task.create_dataset(args.train_dataset)
+
+            # Construct a list of prompts and corresponding golden answers for the training set, 
+            # where each prompt is repeated `args.train_outcomes` times.
+            prompts = []
+            golden_answers = []
+
+            for example in train_set:
+                for _ in range(args.train_outcomes):
+                    prompts.append(example.prompt)
+                    golden_answers.append(example.answer)
 
             # TODO: Generate responses for the constructed training set using `llm_agent.generate`.
             # For each prompt, generate `args.train_outcomes` randomly sampled (i.e., with `sample=True`)
             # responses.
-            ...
+            responses, token_ids, old_probs = llm_agent.generate(
+                prompts,
+                sample=True,
+                output_probs=True,
+            )
 
             # TODO: Compute the rewards for the generated responses.
             #
@@ -192,23 +228,42 @@ def main(args: argparse.Namespace) -> LLMAgent | None:
             # - Lastly, we might introduce length-based rewards for correct answers too, slightly
             #   preferring shorter answers to avoid repetitions and other irrelevant content.
             # Note that the assignment can be solved by any of the above approaches.
-            ...
+            extracted = [task.extract_answer(response) for response in responses]
+            rewards = [
+                1.0 if extracted_answer == golden_answer else 0.0
+                for extracted_answer, golden_answer in zip(extracted, golden_answers)
+            ]
+
+            # Reshape the rewards to a 2D list of shape (args.train_dataset, args.train_outcomes) to compute the advantages
+            # separately for each prompt.
+            rewards = torch.tensor(rewards, device=llm_agent.device).reshape(args.train_dataset, args.train_outcomes)
 
             # TODO: Compute the advantages based on the rewards. Following Dr. GRPO approach,
             # it is sufficient to mean-center the rewards for each prompt (without also
             # dividing by the standard deviation).
-            ...
+            advantages = rewards - torch.mean(rewards, dim=1, keepdim=True)
+
+            # Before passing the adventages to the `train_batch` method, flatten it back to match the response order
+            advantages = advantages.flatten()
 
             # TODO: Train on the generated responses using `llm_agent.train_batch` (possibly multiple times).
-            ...
+            for _ in range(args.epochs):
+                llm_agent.train_batch(prompts, token_ids, advantages, old_probs)
 
         # TODO: Perform evaluation by calling `llm_agent.generate` on the dev set
         # batch by batch and then computing the accuracy using `task.evaluate`.
-        ...
+        dev_responses = []
+        for i in range(0, len(dev), args.batch_size):
+            dev_responses.extend(llm_agent.generate([example.prompt for example in dev[i:i + args.batch_size]])[0])
+        accuracy = task.evaluate(dev_responses, dev)
+        print(f"Evaluation results: {100 * accuracy:.2f}%")
 
+        if accuracy >= 0.95:
+            training = False
+        
     # Use the following code to save the final model and the arguments.
-    #   llm_agent.save_args(f"{args.model_path}.json", args)
-    #   llm_agent.save_lora(args.model_path)
+    llm_agent.save_args(f"{args.model_path}.json", args)
+    llm_agent.save_lora(args.model_path)
 
 
 if __name__ == "__main__":
@@ -227,3 +282,10 @@ if __name__ == "__main__":
 
         accuracy = task.evaluate(responses, dev)
         print(f"Evaluation results: {100 * accuracy:.2f}%")
+
+        for i in range(min(10, len(dev))):
+            print("Prompt:", dev[i].prompt)
+            print("Correct:", dev[i].answer)
+            print("Response:", repr(responses[i]))
+            print("Extracted:", task.extract_answer(responses[i]))
+            print()
