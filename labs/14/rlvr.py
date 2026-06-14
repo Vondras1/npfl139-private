@@ -21,13 +21,15 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
 parser.add_argument("--clip_epsilon", default=0.2, type=float, help="Clipping epsilon.")
 parser.add_argument("--dev_size", default=256, type=int, help="Number of examples to evaluate.")
-parser.add_argument("--epochs", default=4, type=int, help="Epochs to train each iteration.")
+parser.add_argument("--epochs", default=2, type=int, help="Epochs to train each iteration.")
 parser.add_argument("--evaluate_each", default=10, type=int, help="Evaluate each number of episodes.")
-parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=5e-5, type=float, help="Learning rate.")
 parser.add_argument("--max_tokens", default=64, type=int, help="Maximum length of generated outputs.")
-parser.add_argument("--model_path", default="rlvr.pt", type=str, help="Path where to save the model.")
-parser.add_argument("--train_dataset", default=8, type=int, help="Train dataset size per iteration.")
-parser.add_argument("--train_outcomes", default=8, type=int, help="Number of outcomes per training prompt.")
+parser.add_argument("--model_path", default="rlvr2.pt", type=str, help="Path where to save the model.")
+parser.add_argument("--train_dataset", default=16, type=int, help="Train dataset size per iteration.")
+parser.add_argument("--train_outcomes", default=16, type=int, help="Number of outcomes per training prompt.")
+
+parser.add_argument("--load_model", default=None, type=str, help="Path to a pretrained LoRA model to load before training.")
 
 
 class LLMAgent(torch.nn.Module):
@@ -182,9 +184,17 @@ def main(args: argparse.Namespace) -> LLMAgent | None:
         # Return the loaded agent to ReCodEx for evaluation.
         llm_agent.load_lora(args.model_path)
         return llm_agent
-
+    
     # Create a dev set with fixed seed for consistent evaluation across runs.
     dev = npfl139.llm.Task.from_name(args.task)(seed=42).create_dataset(args.dev_size)
+    
+    if args.load_model:
+        llm_agent.load_lora(args.load_model)
+        print(f"Loaded pretrained model from {args.load_model}")
+
+    best_accuracy = -1.0
+    # Save args once, so ReCodEx can load the model configuration.
+    llm_agent.save_args(f"{args.model_path}.json", args)
 
     training = True
     while training:
@@ -229,10 +239,18 @@ def main(args: argparse.Namespace) -> LLMAgent | None:
             #   preferring shorter answers to avoid repetitions and other irrelevant content.
             # Note that the assignment can be solved by any of the above approaches.
             extracted = [task.extract_answer(response) for response in responses]
-            rewards = [
-                1.0 if extracted_answer == golden_answer else 0.0
-                for extracted_answer, golden_answer in zip(extracted, golden_answers)
-            ]
+            # print(extracted)
+
+            rewards = []
+            for extracted_answer, golden_answer in zip(extracted, golden_answers):
+                if extracted_answer is None:
+                    reward = 0.0
+                elif str(extracted_answer) == str(golden_answer):
+                    reward = 1.0 + 0.05
+                else:
+                    # print(f"Difference between extracted and golden answer: {abs(float(extracted_answer) - float(golden_answer))}")
+                    reward = 0.0 + 0.05
+                rewards.append(reward)
 
             # Reshape the rewards to a 2D list of shape (args.train_dataset, args.train_outcomes) to compute the advantages
             # separately for each prompt.
@@ -258,18 +276,28 @@ def main(args: argparse.Namespace) -> LLMAgent | None:
         accuracy = task.evaluate(dev_responses, dev)
         print(f"Evaluation results: {100 * accuracy:.2f}%")
 
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            llm_agent.save_lora(args.model_path)
+            print(f"New best model saved with accuracy: {100 * best_accuracy:.2f}%")
+
         if accuracy >= 0.95:
             training = False
         
-    # Use the following code to save the final model and the arguments.
-    llm_agent.save_args(f"{args.model_path}.json", args)
-    llm_agent.save_lora(args.model_path)
+    # # Use the following code to save the final model and the arguments.
+    # llm_agent.save_args(f"{args.model_path}.json", args)
+    # llm_agent.save_lora(args.model_path)
 
 
 if __name__ == "__main__":
     main_args = parser.parse_args([] if "__file__" not in globals() else None)
 
     llm_agent = main(main_args)
+
+    # # Load a pretrained LoRA model before continuing training.
+    # if main_args.load_model is not None:
+    #     llm_agent.load_lora(main_args.load_model)
+    #     print(f"Loaded pretrained model from {main_args.load_model}")
 
     if main_args.recodex:
         # Simulate ReCodEx evaluation by running the agent on the dev set and printing the results.

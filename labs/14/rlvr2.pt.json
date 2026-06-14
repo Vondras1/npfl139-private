@@ -1,0 +1,19 @@
+{
+  "llm": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "lora_rank": 32,
+  "recodex": false,
+  "seed": null,
+  "task": "arithmetic",
+  "threads": 1,
+  "batch_size": 64,
+  "clip_epsilon": 0.2,
+  "dev_size": 256,
+  "epochs": 2,
+  "evaluate_each": 10,
+  "learning_rate": 5e-05,
+  "max_tokens": 64,
+  "model_path": "rlvr2.pt",
+  "train_dataset": 32,
+  "train_outcomes": 16,
+  "load_model": "rlvr2.pt"
+}
